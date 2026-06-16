@@ -146,21 +146,38 @@ smoke_test_cli() {
   return 1
 }
 
-# Atomic restore: stage the backup to a sibling temp, then rename it over
-# CLI_BIN. rename() is atomic and yields a fresh inode, so a crash mid-copy
-# can't leave CLI_BIN truncated, and we never overwrite the inode a running
-# Claude Code still holds (which would otherwise risk an AMFI kill on relaunch).
+# Verify-then-atomic-restore: check the backup's hash against the expected
+# original SHA ($1), then stage it to a random sibling temp and rename() over
+# CLI_BIN. The hash check stops a corrupted/substituted backup from silently
+# replacing the live binary. rename() is atomic and yields a fresh inode, so a
+# crash mid-copy can't truncate CLI_BIN, and we never overwrite the inode a
+# running Claude Code still holds (which would risk an AMFI kill on relaunch).
 restore_from_backup() {
+  local expected_sha="${1:-}"
   if [[ ! -f "$BACKUP_PATH" ]]; then
     echo "Error: backup not found, cannot restore: $BACKUP_PATH" >&2
     return 1
   fi
-  local tmp="${CLI_BIN}.evap-restore.$$"
+  local actual_sha
+  actual_sha=$(shasum -a 256 "$BACKUP_PATH" | cut -d' ' -f1)
+  if [[ -n "$expected_sha" && "$actual_sha" != "$expected_sha" ]]; then
+    echo "Error: backup hash mismatch (expected $expected_sha, got $actual_sha)." >&2
+    echo "Refusing to restore a backup that doesn't match recorded state." >&2
+    return 1
+  fi
+  # Random (not PID-predictable) temp name avoids a name-race in the binary's
+  # dir; mktemp creates it 0600, so restore the 755 exec mode before rename.
+  local tmp
+  tmp=$(mktemp "${CLI_BIN}.evap-restore.XXXXXX") || {
+    echo "Error: could not create restore temp file." >&2
+    return 1
+  }
   if ! cp "$BACKUP_PATH" "$tmp"; then
     rm -f "$tmp"
     echo "Error: failed to stage restore copy." >&2
     return 1
   fi
+  chmod 755 "$tmp"
   mv -f "$tmp" "$CLI_BIN"
 }
 
@@ -171,7 +188,7 @@ restore_from_backup() {
 abort_and_restore() {
   echo ""
   echo "WARNING: $1 Restoring..."
-  if restore_from_backup; then
+  if restore_from_backup "$CLI_SHA256"; then
     echo "Restored. Binary unchanged."
   else
     echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
@@ -266,7 +283,7 @@ print(s.get('backup_path',''))
 
   if $DRY_RUN; then
     echo "[dry-run] Would restore from $BACKUP_PATH"
-  elif restore_from_backup; then
+  elif restore_from_backup "$ORIG_SHA"; then
     rm -f "$STATE_FILE"
     echo "Restored from backup. Patch state cleared."
   else
@@ -374,7 +391,7 @@ echo "Verification:"
 echo "  Bug pattern: $V_BUG (expect 0)"
 echo "  Fix pattern: $V_FIX (expect 1)"
 echo "  Byte patch size: $CLI_SIZE → $BYTE_PATCH_SIZE"
-echo "  Final size:      $PATCHED_SIZE"
+echo "  Final size:      $PATCHED_SIZE (differs after re-sign; not size-gated)"
 
 if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$BYTE_PATCH_SIZE" ]]; then
   if ! smoke_test_cli; then
