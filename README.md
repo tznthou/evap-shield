@@ -109,6 +109,33 @@ bash patch-vh1.sh        # re-detect, back up, and patch the new version
 
 ---
 
+## Undoing the Patch
+
+The patch is fully reversible, and reverting is designed to never leave you worse off than an unpatched binary.
+
+```bash
+bash patch-vh1.sh --restore
+```
+
+This restores the original binary from the per-hash backup and clears the patch state. Three layers cover the rollback:
+
+| Layer | When | What it does |
+|-------|------|--------------|
+| **Auto-restore** | A patch step fails (re-sign, launch check, or verification) | Restores the original and exits before a half-patched binary is ever left in place |
+| **`--restore`** | Any time after patching | Reverts to the backed-up original, hash-checked first |
+| **Manual** | If you don't even trust the script | `cp` the backup from `~/.claude/state/patch-backups/` over the binary yourself |
+
+What makes the rollback safe:
+
+- **Atomic.** Restore stages a copy and then `rename()`s it over the binary, so an interrupted restore can't truncate it. The fresh inode also leaves a still-running Claude Code untouched.
+- **Verified.** The backup's SHA-256 is checked against the recorded original *before* it replaces anything — a corrupted backup is refused, not installed.
+- **The floor is "it runs".** Worst case you land on an unpatched-but-working binary (the bug is back, but Claude Code launches) — never one that won't start.
+- **No working Claude Code required.** `--restore` is a terminal command, so even if a launch ever fails, you can recover without a functioning Claude Code.
+
+Like the patch itself, a restore takes effect on the next full restart.
+
+---
+
 ## Project Structure
 
 ```
@@ -155,7 +182,7 @@ We built evap-shield because waiting wasn't an option.
 
 **Two layers, not one.** The hook blocks damage but doesn't fix the parser. The patch fixes the parser but gets wiped on update. Together, the hook is the permanent safety net and the patch reduces noise. Either works alone.
 
-**Per-hash backups, not per-version.** `--restore` must only restore the exact binary that was patched. If the user runs `claude update` between patch and restore, the backup is from a different version. Matching on SHA-256 prevents silent corruption.
+**Per-hash backups, not per-version.** `--restore` must only restore the exact binary that was patched. If the user runs `claude update` between patch and restore, the backup is from a different version. Matching on SHA-256 prevents silent corruption — and the restore itself verifies the backup's hash before trusting it, then swaps it in atomically with `rename()` so an interrupted rollback can never leave a truncated binary.
 
 **Redacted logs by default.** The hook logs tool name and argument key names — never argument values. File paths, code content, and user data stay out of the log file. Full input logging is a privacy risk for an open-source tool.
 

@@ -109,6 +109,33 @@ bash patch-vh1.sh        # 重新偵測、備份、patch 新版本
 
 ---
 
+## 還原 patch
+
+Patch 完全可逆，而且還原機制的設計目標是：再壞也不會比「沒 patch」更糟。
+
+```bash
+bash patch-vh1.sh --restore
+```
+
+這會從 per-hash 備份還原原始 binary，並清除 patch 狀態。三層把關還原：
+
+| 層 | 時機 | 做什麼 |
+|----|------|--------|
+| **自動還原** | patch 某步失敗（重簽、啟動檢查、驗證） | 還原原始 binary 並退出，絕不會留下半 patch 的 binary |
+| **`--restore`** | patch 後任何時候 | 還原備份的原始版本，還原前先做 hash 比對 |
+| **手動** | 連腳本都不想信 | 自己把 `~/.claude/state/patch-backups/` 裡的備份 `cp` 蓋回 binary |
+
+還原為什麼是安全的：
+
+- **原子替換。** 還原會先複製到暫存檔，再用 `rename()` 蓋過 binary，中斷的還原不會把 binary 截斷成半個。新 inode 也不會動到還在執行的 Claude Code。
+- **先驗證。** 備份的 SHA-256 會在替換*之前*先跟記錄的原始 hash 比對——損壞的備份會被拒絕，而不是被裝上去。
+- **下限是「跑得起來」。** 最壞情況是落在「沒 patch 但能跑」的 binary（bug 回來了，但 Claude Code 啟動得了）——絕不會是開不起來的那種。
+- **不需要一個能跑的 Claude Code。** `--restore` 是 terminal 指令，所以就算哪天啟動失敗，你不靠一個正常的 Claude Code 也能救回來。
+
+跟 patch 本身一樣，還原要等下次完全重啟才生效。
+
+---
+
 ## 專案結構
 
 ```
@@ -155,7 +182,7 @@ Issue 有 54+ 留言，零官方回覆。唯一乾淨的出路是降回 Opus 4.6
 
 **兩層防禦，不是一層。** Hook 擋住傷害但不修 parser。Patch 修了 parser 但更新後會被覆蓋。搭在一起，hook 是永久安全網，patch 降低噪音。各自單獨也能運作。
 
-**Per-hash 備份，不是 per-version。** `--restore` 只能還原「被 patch 的那個 binary」。如果使用者在 patch 和 restore 之間跑了 `claude update`，備份來自不同版本。用 SHA-256 比對防止靜默還原錯版本。
+**Per-hash 備份，不是 per-version。** `--restore` 只能還原「被 patch 的那個 binary」。如果使用者在 patch 和 restore 之間跑了 `claude update`，備份來自不同版本。用 SHA-256 比對防止靜默還原錯版本——而且還原本身會先驗證備份的 hash 才信任它，再用 `rename()` 原子替換，被中斷的還原也絕不會留下截斷的 binary。
 
 **Log 預設脫敏。** Hook 只記 tool name 和參數的 key 名稱——永遠不記參數值。檔案路徑、程式碼、使用者資料不會進 log。對開源工具來說，完整 input logging 是隱私風險。
 
