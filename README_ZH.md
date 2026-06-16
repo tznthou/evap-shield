@@ -56,6 +56,7 @@ Hook 是安全網。Patch 降低 hook 需要觸發的頻率。
 - Bash 4.0+
 - `jq`（hook 需要）
 - Python 3（patcher 需要）
+- macOS 上需要 `codesign`（用來重新簽署 patch 後的 Mach-O binary）
 
 ### 安裝 hook
 
@@ -73,7 +74,9 @@ bash install.sh
 bash patch-vh1.sh
 ```
 
-腳本會自動定位 Claude Code binary、確認 bug pattern 只出現一次、建立 per-hash 備份、patch、驗證結果。
+腳本會自動定位 Claude Code binary、確認 bug pattern 只出現一次、建立 per-hash 備份、patch、在 macOS 重新簽署 Mach-O binary，並用啟動檢查驗證結果。
+
+> **提示：** 為求最乾淨的結果，patch 前可先完全關閉 Claude Code。即使 CC 開著也能安全執行——啟動檢查用的是獨立的臨時副本，不是正在執行的 binary，所以不會被記憶體裡的舊映像誤導。
 
 Patch 要完全重啟後才生效，且每次 `claude update` 後都得重跑——見 [讓 patch 生效](#讓-patch-生效)。
 

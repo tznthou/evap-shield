@@ -61,6 +61,102 @@ CLI_VERSION=$(strings "$CLI_BIN" | grep -o '"2\.[0-9]*\.[0-9]*"' | tail -1 | tr 
 CLI_SHA256=$(shasum -a 256 "$CLI_BIN" | cut -d' ' -f1)
 CLI_SIZE=$(wc -c < "$CLI_BIN" | tr -d ' ')
 
+# ── macOS Mach-O signing ──
+is_macos_macho() {
+  [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] || return 1
+  command -v file >/dev/null 2>&1 || return 1
+  file "$CLI_BIN" 2>/dev/null | grep -q "Mach-O"
+}
+
+codesign_status() {
+  if is_macos_macho && command -v codesign >/dev/null 2>&1; then
+    if codesign --verify --verbose=1 "$CLI_BIN" >/dev/null 2>&1; then
+      echo "valid"
+    else
+      echo "invalid"
+    fi
+  else
+    echo "n/a"
+  fi
+}
+
+resign_macho_if_needed() {
+  is_macos_macho || return 0
+
+  if ! command -v codesign >/dev/null 2>&1; then
+    echo "Error: patched macOS Mach-O binary requires codesign, but codesign was not found." >&2
+    return 1
+  fi
+
+  if codesign --verify --verbose=1 "$CLI_BIN" >/dev/null 2>&1; then
+    echo "Mach-O signature already valid."
+    return 0
+  fi
+
+  if $DRY_RUN; then
+    echo "[dry-run] Would re-sign Mach-O binary (ad-hoc)."
+    return 0
+  fi
+
+  echo "Re-signing Mach-O binary (ad-hoc)..."
+  codesign --force --sign - "$CLI_BIN" >/dev/null
+}
+
+smoke_test_cli() {
+  # Verify the patched binary launches — but exec a COPY on a fresh inode,
+  # never "$CLI_BIN" directly. If Claude Code is currently running it holds
+  # CLI_BIN's inode mmap'd; an in-place patch makes the on-disk pages diverge
+  # from that live image, and macOS AMFI SIGKILLs any new exec of that inode
+  # (exit 137) — a false negative that would trigger a needless restore. A
+  # copy on a new inode tests the patched bytes cleanly (an ad-hoc signature
+  # travels with the bytes, so the copy is equally valid to launch).
+  local probe version_out rc=0
+  probe=$(mktemp "${TMPDIR:-/tmp}/claude-smoke.XXXXXX") || {
+    echo "Error: smoke test could not create a temp file." >&2
+    return 1
+  }
+  if ! cp "$CLI_BIN" "$probe"; then
+    rm -f "$probe"
+    echo "Error: smoke test could not copy the binary for launch check." >&2
+    return 1
+  fi
+  chmod +x "$probe"
+  # `... && rc=0 || rc=$?` keeps the failing exit out of `set -e`'s reach
+  # (a bare `version_out=$(...)` would abort here on a non-zero exit).
+  version_out=$("$probe" --version 2>&1) && rc=0 || rc=$?
+  rm -f "$probe"
+
+  if [[ $rc -eq 0 ]]; then
+    echo "Launch check: $version_out"
+    return 0
+  fi
+
+  echo "Error: patched binary failed launch check (exit $rc)." >&2
+  if [[ -n "$version_out" ]]; then
+    echo "$version_out" >&2
+  fi
+  return 1
+}
+
+refresh_state_patched_sha() {
+  [[ -f "$STATE_FILE" ]] || return 0
+
+  local refreshed_sha refreshed_size
+  refreshed_sha=$(shasum -a 256 "$CLI_BIN" | cut -d' ' -f1)
+  refreshed_size=$(wc -c < "$CLI_BIN" | tr -d ' ')
+
+  python3 -c "
+import json
+path = '$STATE_FILE'
+state = json.load(open(path))
+state['patched_sha256'] = '$refreshed_sha'
+state['size'] = $refreshed_size
+state['resigned_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
+json.dump(state, open(path, 'w'), indent=2)
+"
+  echo "State refreshed: $STATE_FILE"
+}
+
 # ── Pattern detection ──
 detect_pattern() {
   python3 -c "
@@ -90,6 +186,10 @@ if $STATUS; then
   echo "SHA256:  $CLI_SHA256"
   echo "Size:    $CLI_SIZE"
   echo "Status:  $PATCH_STATUS"
+  SIGN_STATUS=$(codesign_status)
+  if [[ "$SIGN_STATUS" != "n/a" ]]; then
+    echo "Signature: $SIGN_STATUS"
+  fi
   if [[ -f "$STATE_FILE" ]]; then
     LAST_VERSION=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('version','?'))" 2>/dev/null || echo "?")
     LAST_SHA=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('patched_sha256','?'))" 2>/dev/null || echo "?")
@@ -155,6 +255,12 @@ fi
 # ── Patch mode ──
 if [[ "$PATCH_STATUS" == "patched" ]]; then
   echo "Already patched."
+  resign_macho_if_needed
+  if $DRY_RUN; then
+    exit 0
+  fi
+  smoke_test_cli
+  refresh_state_patched_sha
   exit 0
 fi
 
@@ -207,6 +313,19 @@ open('$CLI_BIN', 'wb').write(patched)
 print('Patch applied.')
 "
 
+BYTE_PATCH_SIZE=$(wc -c < "$CLI_BIN" | tr -d ' ')
+# resign is a bare call under `set -e`: a non-zero return would abort the
+# script here, leaving a patched-but-unsigned (un-launchable) binary that
+# never reaches the smoke-test/restore safety net below. Guard it so any
+# re-sign failure restores the original binary instead of bricking it.
+if ! resign_macho_if_needed; then
+  echo ""
+  echo "WARNING: Re-signing failed. Restoring..."
+  cp "$BACKUP_PATH" "$CLI_BIN"
+  echo "Restored. Binary unchanged."
+  exit 1
+fi
+
 # ── Verify + save state ──
 PATCHED_SHA256=$(shasum -a 256 "$CLI_BIN" | cut -d' ' -f1)
 VERIFY_RESULT=$(detect_pattern)
@@ -218,9 +337,18 @@ echo ""
 echo "Verification:"
 echo "  Bug pattern: $V_BUG (expect 0)"
 echo "  Fix pattern: $V_FIX (expect 1)"
-echo "  Size:        $CLI_SIZE → $PATCHED_SIZE"
+echo "  Byte patch size: $CLI_SIZE → $BYTE_PATCH_SIZE"
+echo "  Final size:      $PATCHED_SIZE"
 
-if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$PATCHED_SIZE" ]]; then
+if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$BYTE_PATCH_SIZE" ]]; then
+  if ! smoke_test_cli; then
+    echo ""
+    echo "WARNING: Launch verification failed. Restoring..."
+    cp "$BACKUP_PATH" "$CLI_BIN"
+    echo "Restored. Binary unchanged."
+    exit 1
+  fi
+
   mkdir -p "$STATE_DIR"
   python3 -c "
 import json
@@ -230,7 +358,8 @@ state = {
     'version': '$CLI_VERSION',
     'original_sha256': '$CLI_SHA256',
     'patched_sha256': '$PATCHED_SHA256',
-    'size': $CLI_SIZE,
+    'original_size': $CLI_SIZE,
+    'size': $PATCHED_SIZE,
     'backup_path': '$BACKUP_PATH',
     'patched_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
 }

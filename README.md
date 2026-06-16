@@ -56,6 +56,7 @@ The hook is your safety net. The patch reduces how often the hook needs to fire.
 - Bash 4.0+
 - `jq` (for the hook)
 - Python 3 (for the patcher)
+- `codesign` on macOS (used to re-sign patched Mach-O binaries)
 
 ### Install the hook
 
@@ -73,7 +74,9 @@ This copies `evap-shield.sh` to `~/.claude/hooks/` and registers it in `settings
 bash patch-vh1.sh
 ```
 
-The script automatically locates your Claude Code binary, verifies the bug pattern exists exactly once, creates a per-hash backup, patches, and verifies the result.
+The script automatically locates your Claude Code binary, verifies the bug pattern exists exactly once, creates a per-hash backup, patches, re-signs patched Mach-O binaries on macOS, and verifies the result with a launch check.
+
+> **Tip:** For the cleanest result, fully quit Claude Code before patching. The script is still safe to run while it's open — the launch check uses an isolated temporary copy, not the running binary, so it isn't tripped up by the in-memory image.
 
 The patch takes effect only after a full restart, and must be re-run after every `claude update` — see [Keeping the Patch Effective](#keeping-the-patch-effective).
 
