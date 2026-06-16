@@ -110,8 +110,12 @@ smoke_test_cli() {
   # (exit 137) — a false negative that would trigger a needless restore. A
   # copy on a new inode tests the patched bytes cleanly (an ad-hoc signature
   # travels with the bytes, so the copy is equally valid to launch).
+  # Stage the probe NEXT TO CLI_BIN, not in TMPDIR: a noexec or policy-blocked
+  # TMPDIR would fail the launch check on a perfectly good binary and trigger a
+  # needless restore. CLI_BIN's own directory is writable (we patch there) and
+  # executable. It's still a separate inode, so it avoids the running-inode kill.
   local probe version_out rc=0
-  probe=$(mktemp "${TMPDIR:-/tmp}/claude-smoke.XXXXXX") || {
+  probe=$(mktemp "${CLI_BIN%/*}/claude-smoke.XXXXXX") || {
     echo "Error: smoke test could not create a temp file." >&2
     return 1
   }
@@ -120,7 +124,11 @@ smoke_test_cli() {
     echo "Error: smoke test could not copy the binary for launch check." >&2
     return 1
   fi
-  chmod +x "$probe"
+  if ! chmod +x "$probe"; then
+    rm -f "$probe"
+    echo "Error: smoke test could not set the execute bit on the probe." >&2
+    return 1
+  fi
   # `... && rc=0 || rc=$?` keeps the failing exit out of `set -e`'s reach
   # (a bare `version_out=$(...)` would abort here on a non-zero exit).
   version_out=$("$probe" --version 2>&1) && rc=0 || rc=$?
@@ -138,23 +146,22 @@ smoke_test_cli() {
   return 1
 }
 
-refresh_state_patched_sha() {
-  [[ -f "$STATE_FILE" ]] || return 0
-
-  local refreshed_sha refreshed_size
-  refreshed_sha=$(shasum -a 256 "$CLI_BIN" | cut -d' ' -f1)
-  refreshed_size=$(wc -c < "$CLI_BIN" | tr -d ' ')
-
-  python3 -c "
-import json
-path = '$STATE_FILE'
-state = json.load(open(path))
-state['patched_sha256'] = '$refreshed_sha'
-state['size'] = $refreshed_size
-state['resigned_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
-json.dump(state, open(path, 'w'), indent=2)
-"
-  echo "State refreshed: $STATE_FILE"
+# Atomic restore: stage the backup to a sibling temp, then rename it over
+# CLI_BIN. rename() is atomic and yields a fresh inode, so a crash mid-copy
+# can't leave CLI_BIN truncated, and we never overwrite the inode a running
+# Claude Code still holds (which would otherwise risk an AMFI kill on relaunch).
+restore_from_backup() {
+  if [[ ! -f "$BACKUP_PATH" ]]; then
+    echo "Error: backup not found, cannot restore: $BACKUP_PATH" >&2
+    return 1
+  fi
+  local tmp="${CLI_BIN}.evap-restore.$$"
+  if ! cp "$BACKUP_PATH" "$tmp"; then
+    rm -f "$tmp"
+    echo "Error: failed to stage restore copy." >&2
+    return 1
+  fi
+  mv -f "$tmp" "$CLI_BIN"
 }
 
 # ── Pattern detection ──
@@ -244,10 +251,12 @@ print(s.get('backup_path',''))
 
   if $DRY_RUN; then
     echo "[dry-run] Would restore from $BACKUP_PATH"
-  else
-    cp "$BACKUP_PATH" "$CLI_BIN"
+  elif restore_from_backup; then
     rm -f "$STATE_FILE"
     echo "Restored from backup. Patch state cleared."
+  else
+    echo "Error: restore failed — original backup at $BACKUP_PATH" >&2
+    exit 1
   fi
   exit 0
 fi
@@ -255,12 +264,28 @@ fi
 # ── Patch mode ──
 if [[ "$PATCH_STATUS" == "patched" ]]; then
   echo "Already patched."
-  resign_macho_if_needed
+  # If the binary no longer matches our recorded patch (e.g. Claude Code was
+  # updated to a version that happens to look patched), don't mutate it or
+  # refresh state — a stale backup/SHA pairing could later make --restore
+  # overwrite the wrong binary. Warn and leave recorded state untouched.
+  if [[ -f "$STATE_FILE" ]]; then
+    RECORDED_SHA=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('patched_sha256',''))" 2>/dev/null || echo "")
+    if [[ -n "$RECORDED_SHA" && "$CLI_SHA256" != "$RECORDED_SHA" ]]; then
+      echo "Warning: binary SHA differs from recorded patch state — Claude Code may have been updated." >&2
+      echo "If so, run 'bash $0 --restore' then re-patch." >&2
+    fi
+  fi
+  if ! resign_macho_if_needed; then
+    echo "Error: re-signing the already-patched binary failed." >&2
+    exit 1
+  fi
   if $DRY_RUN; then
     exit 0
   fi
-  smoke_test_cli
-  refresh_state_patched_sha
+  if ! smoke_test_cli; then
+    echo "Error: already-patched binary failed launch check." >&2
+    exit 1
+  fi
   exit 0
 fi
 
@@ -321,8 +346,11 @@ BYTE_PATCH_SIZE=$(wc -c < "$CLI_BIN" | tr -d ' ')
 if ! resign_macho_if_needed; then
   echo ""
   echo "WARNING: Re-signing failed. Restoring..."
-  cp "$BACKUP_PATH" "$CLI_BIN"
-  echo "Restored. Binary unchanged."
+  if restore_from_backup; then
+    echo "Restored. Binary unchanged."
+  else
+    echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
+  fi
   exit 1
 fi
 
@@ -344,8 +372,11 @@ if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$BYTE_PATCH_SIZE" ]];
   if ! smoke_test_cli; then
     echo ""
     echo "WARNING: Launch verification failed. Restoring..."
-    cp "$BACKUP_PATH" "$CLI_BIN"
-    echo "Restored. Binary unchanged."
+    if restore_from_backup; then
+      echo "Restored. Binary unchanged."
+    else
+      echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
+    fi
     exit 1
   fi
 
@@ -375,7 +406,10 @@ json.dump(state, open('$STATE_FILE', 'w'), indent=2)
 else
   echo ""
   echo "WARNING: Verification failed. Restoring..."
-  cp "$BACKUP_PATH" "$CLI_BIN"
-  echo "Restored. Binary unchanged."
+  if restore_from_backup; then
+    echo "Restored. Binary unchanged."
+  else
+    echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
+  fi
   exit 1
 fi
