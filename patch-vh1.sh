@@ -164,6 +164,21 @@ restore_from_backup() {
   mv -f "$tmp" "$CLI_BIN"
 }
 
+# Abort path for a failed patch step: print the given reason, restore the
+# original binary from backup, and exit 1. Only ever called once we've already
+# decided to bail, so the unconditional exit is intentional. The `if` around
+# restore_from_backup keeps its non-zero return out of `set -e`'s reach.
+abort_and_restore() {
+  echo ""
+  echo "WARNING: $1 Restoring..."
+  if restore_from_backup; then
+    echo "Restored. Binary unchanged."
+  else
+    echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
+  fi
+  exit 1
+}
+
 # ── Pattern detection ──
 detect_pattern() {
   python3 -c "
@@ -344,14 +359,7 @@ BYTE_PATCH_SIZE=$(wc -c < "$CLI_BIN" | tr -d ' ')
 # never reaches the smoke-test/restore safety net below. Guard it so any
 # re-sign failure restores the original binary instead of bricking it.
 if ! resign_macho_if_needed; then
-  echo ""
-  echo "WARNING: Re-signing failed. Restoring..."
-  if restore_from_backup; then
-    echo "Restored. Binary unchanged."
-  else
-    echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
-  fi
-  exit 1
+  abort_and_restore "Re-signing failed."
 fi
 
 # ── Verify + save state ──
@@ -370,14 +378,7 @@ echo "  Final size:      $PATCHED_SIZE"
 
 if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$BYTE_PATCH_SIZE" ]]; then
   if ! smoke_test_cli; then
-    echo ""
-    echo "WARNING: Launch verification failed. Restoring..."
-    if restore_from_backup; then
-      echo "Restored. Binary unchanged."
-    else
-      echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
-    fi
-    exit 1
+    abort_and_restore "Launch verification failed."
   fi
 
   mkdir -p "$STATE_DIR"
@@ -404,12 +405,5 @@ json.dump(state, open('$STATE_FILE', 'w'), indent=2)
   echo "To restore:            bash $0 --restore"
   echo "Check status:          bash $0 --status"
 else
-  echo ""
-  echo "WARNING: Verification failed. Restoring..."
-  if restore_from_backup; then
-    echo "Restored. Binary unchanged."
-  else
-    echo "Restore FAILED — original backup at $BACKUP_PATH" >&2
-  fi
-  exit 1
+  abort_and_restore "Verification failed."
 fi
