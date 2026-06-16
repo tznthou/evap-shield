@@ -1,4 +1,23 @@
+# Claude Code local workflow — never commit
 .claude/
+
+# macOS
 .DS_Store
+._*
+
+# evap-shield runtime logs
 *.log
 *.log.jsonl
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Backups & temp from patch-vh1.sh / install.sh
+*.bak*
+*.orig
+*.tmp
+*.tmp.*
