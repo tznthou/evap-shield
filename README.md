@@ -75,7 +75,34 @@ bash patch-vh1.sh
 
 The script automatically locates your Claude Code binary, verifies the bug pattern exists exactly once, creates a per-hash backup, patches, and verifies the result.
 
-After `claude update`, run `bash patch-vh1.sh` again.
+The patch takes effect only after a full restart, and must be re-run after every `claude update` — see [Keeping the Patch Effective](#keeping-the-patch-effective).
+
+---
+
+## Keeping the Patch Effective
+
+The patch edits the binary on disk — but that's not the whole story. Here's when it actually takes effect, and when you have to re-run it.
+
+### After patching: restart required
+
+The running Claude Code already loaded the old, unpatched binary into memory, so **the patch does not affect your current session**. To activate it:
+
+1. Fully quit Claude Code — not just `/clear` or a new session, the whole process.
+2. If you launch Claude Code through a wrapper or persistent launcher (a terminal multiplexer, a background daemon, an IDE extension host), that process may hold its own copy of the binary — restart the wrapper too.
+3. Start a fresh session and confirm with `bash patch-vh1.sh --status` (expect `Status: patched`).
+
+### After `claude update`: re-run required
+
+`claude update` installs a brand-new version into a separate directory and repoints `claude` at it. Your patched binary is left behind — untouched but no longer used — and the new one ships with the bug again.
+
+So after every update:
+
+```bash
+bash patch-vh1.sh        # re-detect, back up, and patch the new version
+# then restart, as above
+```
+
+`--status` reflects the on-disk binary the script resolves, not the one your current session is running. Run `bash patch-vh1.sh --status` any time to see whether it's `patched` or `vulnerable`.
 
 ---
 

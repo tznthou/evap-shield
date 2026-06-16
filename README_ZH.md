@@ -75,7 +75,34 @@ bash patch-vh1.sh
 
 腳本會自動定位 Claude Code binary、確認 bug pattern 只出現一次、建立 per-hash 備份、patch、驗證結果。
 
-`claude update` 之後，重跑 `bash patch-vh1.sh` 即可。
+Patch 要完全重啟後才生效，且每次 `claude update` 後都得重跑——見 [讓 patch 生效](#讓-patch-生效)。
+
+---
+
+## 讓 patch 生效
+
+Patch 改的是磁碟上的 binary——但故事還沒完。以下說明它什麼時候才真的生效，以及什麼時候得重跑。
+
+### Patch 後：必須重啟
+
+正在執行的 Claude Code 早就把舊的、未 patch 的 binary 載進記憶體了，所以 **patch 不影響當前 session**。要讓它生效：
+
+1. 完全結束 Claude Code——不是 `/clear` 或開新 session，是整個 process 關掉。
+2. 如果你透過 wrapper 或常駐啟動器開 Claude Code（terminal multiplexer、背景 daemon、IDE 擴充套件的 host process），那個 process 可能持有自己的一份 binary 副本——連 wrapper 一起重啟。
+3. 開一個全新 session，用 `bash patch-vh1.sh --status` 確認（應顯示 `Status: patched`）。
+
+### `claude update` 後：必須重跑
+
+`claude update` 會把全新版本裝進另一個目錄，並把 `claude` 指過去。你 patch 過的 binary 被留在原地——沒被動過，但也不再被使用——而新的那個又帶著 bug。
+
+所以每次更新後：
+
+```bash
+bash patch-vh1.sh        # 重新偵測、備份、patch 新版本
+# 然後依上述步驟重啟
+```
+
+`--status` 反映的是腳本解析到的磁碟 binary，不是當前 session 正在跑的那個。任何時候都能跑 `bash patch-vh1.sh --status` 查看它是 `patched` 還是 `vulnerable`。
 
 ---
 
