@@ -4,6 +4,9 @@
 # Internal research / experiment trajectory records — local-only
 research/
 
+# writing-flow drafts — local-only; only the final docs/ output gets committed
+.draft/
+
 # macOS
 .DS_Store
 ._*
