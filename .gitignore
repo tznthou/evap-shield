@@ -1,6 +1,9 @@
 # Claude Code local workflow — never commit
 .claude/
 
+# Internal research / experiment trajectory records — local-only
+research/
+
 # macOS
 .DS_Store
 ._*
