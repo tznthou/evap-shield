@@ -1,0 +1,111 @@
+# Investigating Claude Code's tool-argument evaporation bug: the VH1 parser, a two-byte patch, and what it doesn't fix
+
+*A field report on root-causing, patching, and verifying the bug where tool calls silently lose their arguments, with an honest account of what the fix does and does not cover.*
+
+*Time anchor: all binary-level findings are as of Claude Code 2.1.179 (2026-06-17). The methods below let you re-check any later build yourself.*
+
+## TL;DR
+
+- **The bug is real and unfixed upstream.** Tool calls intermittently arrive with their arguments collapsed to `{}`. Three open issues track it (#62123, #67765, #63583); none had a maintainer reply as of 2026-06-17.
+- **Root cause (one sub-shape of it):** a client-side streaming partial-JSON parser drops a string token when a value is cut across a streaming chunk boundary, collapsing the tool input to `{}`. We reached this independently; @in4mer filed the same analysis first in #67765.
+- **It is patchable on the client.** Because this sub-shape lives in the client parser, a single two-byte binary patch (`!Y`→`!0`) stops the token from being discarded. As far as we found, evap-shield is the only tool that patches the parser itself rather than cleaning up after the fact.
+- **The patch is verified correct by a white-box unit test: 760 truncation cases, 0 regressions.** It compares the original and patched parser byte-for-byte at every streaming cut point.
+- **The official 2.1.179 did not fix it.** A 178↔179 binary diff shows the parser byte unchanged; the changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
+- **Honest boundary:** the patch covers one corner of a larger bug cluster. A second camp attributes other failures in the same cluster to the model emitting malformed markup, which a client patch cannot touch. We could not reproduce one of @in4mer's four points on 2.1.179. And the parser's primary failure path is, by construction, not reachable from a server-side mock, so the unit test rather than an end-to-end test is what verifies the fix.
+
+## 1. The symptom: a tool call with no arguments
+
+While writing this investigation, the tool I was using produced a clean example of the failure family it describes. A step was marked `completed`, but the content that step was supposed to deliver never appeared. The shell of the action was there; the payload was gone. My first instinct was that I had just been bitten by the bug under study.
+
+I was wrong, and how I found out is the point. A single screenshot, `API Error: 529 Overloaded`, showed the real cause: a server-side interruption that cut the response stream mid-flight, between one block and the next. Not the parser bug. Not the agent skipping a step. A third cause I had not even listed.
+
+That matters because the cause I jumped to and the cause that actually happened produce the *same observable symptom*: an action that reports success while its payload silently disappears. Across this whole bug cluster that is the recurring trap. The symptoms converge, the root causes do not, and you cannot tell them apart without evidence. (The 529 interruption is exactly the connection-drop shape that Section 6 shows *bypasses* the parser bug rather than triggering it.)
+
+The bug this report is about looks like this: a model decides to call a tool, the call goes out, and its `input` arrives as `{}`. The model reached for a tool and came back empty-handed. The same root cause surfaces downstream as three distinct symptoms:
+
+- `input: {}`: the tool_use block is present but the arguments are empty. This is the main case in #67765.
+- the tool_use block disappears entirely: `stop_reason` is `tool_use` but no block follows. This matches the title of #63583 verbatim.
+- a silent stall: empty text, with `stop_reason` not set to `tool_use`.
+
+It is real and not rare: #62123 has 54 comments, and both #67765 and #63583 carry a `has repro` label. I won't claim a frequency beyond that. There is no hard data for one, and the bug is intermittent by nature.
+
+## 2. Two camps, no upstream fix, and nobody patching it
+
+The bug has two competing root-cause theories, and they are not really fighting over the same failure; each fits a different sub-shape of the cluster.
+
+- **Camp A, client parser.** A streaming partial-JSON parser drops tokens when a value is split across chunks, collapsing the input to `{}`. This is @in4mer's position and ours. Because it lives in the client, it can be patched there.
+- **Camp B, model-side.** The model emits malformed legacy markup (bare invoke tags missing their prefix); the client is only reporting what it received, not producing the error. This cannot be fixed client-side; it can only be recovered from or degraded around.
+
+This is not a question of one camp being wrong. The two likely describe different routes into the same observable failure, and Section 8 returns to where they part ways. It also happens that the people who diagnose it as a client parser bug are the ones who go on to patch the binary.
+
+Upstream, nothing has moved. All three issues are open with zero maintainer replies, and none was touched after 2.1.179 shipped on the same day. Even the triage labels are split: `area:model` on #62123 and #63583, `area:core` and `area:mcp` on #67765. I'll note the split and leave the reading of it open.
+
+The tooling around the bug is real but aimed elsewhere. @in4mer has the sharpest analysis of the lot but no tool. `claude-code-unpoison` rewinds a poisoned session after the fact so you can resume cleanly. `cc-safe-setup` is a large hook safety kit that classifies incidents and helps recover. None of them touches the parser.
+
+Which leaves the question this report answers: can the client side actually *fix* this, not just recover, for Camp A's sub-shape? Yes, with a two-byte patch. The rest of this report is the evidence for that claim and the boundary around it.
+
+## 3. Root cause: the VH1 streaming parser
+
+The tool input passes through a four-layer pipeline, `JSON.parse(kH1(vH1(bFH(VH1(H)))))` (minified names, version-specific). VH1 is the streaming tokenizer, and it is where the bug lives. When a string value is split across streaming chunks and the closing quote has not arrived yet, VH1 discards the in-flight string token instead of holding it. The cascade collapses, and the final input parses to `{}`.
+
+@in4mer's #67765, which he titled "accumulator shear," lays out the same first three stages: the parser drop, a secondary `?? {}` fallback that turns the broken parse into an empty object, and a per-tool cache that makes the empty result stick. He shipped a repro with it. We arrived at the same three stages independently, from our own extraction of the binary.
+
+The fix, in concept, is to make the parser keep the incomplete string token rather than discard it, so the cascade never breaks. In the binary that is a two-byte change of the same length, with no offset shift. I'm deliberately not walking through the patching procedure here. The mechanism is the point of this section, and the tool in the repo carries its own safety rails for anyone who wants the rest.
+
+## 4. Does the patch actually work? 760 tests, 0 regressions
+
+The verification is white-box. Extract the four-layer pipeline, run the original and patched parser side by side, and compare their output byte-for-byte at every streaming truncation boundary.
+
+**760 tests, 0 regressions.** Zero-cost, deterministic, no real API calls. The patch changes behaviour only in the truncated-string intermediate state; on the happy path the two parsers are byte-identical. That last part is what makes the change safe to ship: it stays inert unless the exact failure condition occurs.
+
+Why a *unit* test is the verification that counts, rather than something end-to-end, is the subject of Section 6. Hold the thought.
+
+## 5. Is it safe to patch a running binary?
+
+The scare came first: a freshly patched binary exited 137 (SIGKILL) on launch. The obvious hypothesis was that the byte patch broke the Developer ID signature and AMFI rejected it.
+
+A control experiment falsified that. The factory binary copied to a fresh path ran fine (exit 0). The *same bytes* written in place over the running inode exited 137, regardless of whether the signature was valid. The real cause is overwriting an inode that is currently mmap'd and executing: the on-disk code pages diverge from the running image, and AMFI SIGKILLs the next exec of that inode. It also explains why the patch only takes effect after a full restart.
+
+The fix has three parts, and dropping any one re-bricks the binary:
+
+1. **Ad-hoc re-sign after patching.** The byte change invalidates the Developer ID signature. With no Anthropic private key, an ad-hoc signature is the only local option, and it is deterministic (same input, same hash).
+2. **Smoke-test a copy on a fresh path**, never the live inode. Otherwise the test re-triggers the 137 and the patch can never install.
+3. **Size-check against the pre-resign size**, because the ad-hoc re-sign changes the binary's size.
+
+On 2.1.179, live: patched, runs (exit 0, no brick), and rolls back cleanly. The binary shrinks by 1.28 MB in the process (226,082,208 → 224,766,816 bytes). That is the factory signature section being swapped for a smaller ad-hoc one, not the patch; the parser change itself is two same-length bytes.
+
+The honest cost: a native update overwrites the patch. Every `claude update` returns the binary to its unpatched state, and the patch has to be re-applied. You are modifying a signed, vendored binary on your own machine; there is a backup, there are safety checks, and it is still at your own risk. This is defensive research on locally-installed software, not an invitation to go modifying binaries casually.
+
+## 6. What we could not prove, and why
+
+This section earns the rest of the report. Three honest limits.
+
+**The parser's primary failure path is not reachable from a server-side mock.** We built a zero-cost end-to-end harness, a local mock server feeding truncated streams to the real binary, to watch the bug end to end. It could not trigger the primary path. Three different constructions all bypassed it: dropping the connection mid-stream made the transport retry instead of finalizing (the same connection-drop shape as the 529 in Section 1); an external interrupt aborted the whole operation; and a clean truncation fell through to the *secondary* `?? {}` fallback, not the primary parser drop. The primary path requires the client to actively commit a mid-stream partial buffer, something only the interactive TUI's abort-and-finalize handler does. So an end-to-end test *cannot* verify this patch; the unit test from Section 4 is the only thing that can. That is a structural boundary of the harness, not a missing tool.
+
+**The hook layer guards less than it looks.** evap-shield ships a PreToolUse hook alongside the patch. Tested end to end: for built-in tools, an empty `{}` input is caught by Claude Code's own `InputValidationError` before the hook is ever called, so the hook is redundant there. For MCP tools it is different, and this is the one gap we have closed since the earlier writeup: we have now verified, on 2.1.179, that an MCP tool's `{}` input *does* reach the hook and evap-shield blocks it. (MCP tool schemas live server-side, so the client's `InputValidationError` does not fire first.) There is a third shape: the tool_use block vanishes after the call already executed. The PreToolUse hook cannot catch that at all, because it runs before execution. The binary patch, not the hook, is the layer that covers the parser at its source.
+
+**We could not reproduce one of @in4mer's four points.** His #67765 lists a fourth item: a top-level backslash handler that consumes two characters and drops the next `{` / `"` / `,`. Pulling the tokenizer out of the 2.1.179 binary and running it on real input, a top-level `\` followed by any of those tokenizes with nothing dropped. The handler skips only a single stray character. I want to be precise about what this is: *we could not reproduce his fourth point on 2.1.179*, which is not a refutation. He analyzed 2.1.173; the code may have changed between versions, or we may be looking at a different path than the one he meant. His first three points we reached independently and agree with. The shape we can reliably reproduce is the string-handler drop, and that is the one the patch targets.
+
+## 7. Did the official 2.1.179 fix it?
+
+The method matters more than the verdict, because the method outlasts any single version. The binary is a bun-compiled Mach-O with the JS bundle minified onto enormous single lines, so you can't diff a beautified file. Two anchored diffs do the job: (1) find the parser's `push` call, pull the bytes around it, and check whether the preceding bytes read `,!Y)` (original) or `,!0)` (patched); (2) extract short strings (`strings -a -n 6`, drop the long lines, sort-unique) and `comm` the two versions to surface what the newer build added.
+
+The verdict, 178↔179: the parser byte is unchanged, and 179 still ships the original `,!Y)`. What 179 *did* add is all higher-layer: a "finalizing partial response" path, a partial-finalized telemetry event, and a friendly "connection closed mid-response" message, all operating at the SSE-block level rather than the JSON-token level. The changelog line "mid-stream connection drops: partial responses preserved" is graceful degradation, not a parser fix.
+
+One counterintuitive consequence: now that the client preserves a partial response and feeds it onward, that incomplete JSON still has to pass through the unpatched parser. If anything, that could make the parser bug *easier* to hit on the connection-drop path, not harder. The official change moved the ball closer to the bug without fixing it.
+
+Time anchor again: this is 2.1.179 on 2026-06-17. Re-run the two diffs on any later build to check it for yourself.
+
+## 8. Honest scope: one corner of the cluster
+
+evap-shield's patch covers Camp A's sub-shape. It is not the whole cluster. The community splits tool-call parsing failures into several sub-patterns, and Camp B's malformed-markup route is a different one. That is exactly why, in our own harness, the patched binary still produced `{}` on a clean truncation: that path hits the secondary fallback, not the primary parser drop (Section 6). The fix is real. It is one corner.
+
+The rest of the landscape is complementary, not competing. `claude-code-unpoison` rewinds a poisoned session after the fact. `cc-safe-setup` classifies incidents and recovers at the hook layer. @in4mer's #67765 is the sharpest root-cause writeup of the bunch. Each covers a piece. evap-shield's piece is patching the one parser sub-shape we could reliably reproduce and verify: no more than that, and that much for real.
+
+## References
+
+- Issues: `anthropics/claude-code` #62123, #67765 (root cause, @in4mer), #63583
+- evap-shield: `github.com/tznthou/evap-shield` (PreToolUse hook + binary patch)
+- Parser patch pattern: `,!Y)` → `,!0)` (same length, no offset shift)
+- Verification: white-box unit test, 760 truncation cases, 0 regressions
+- Binary-diff method: parser-byte anchor + short-string `comm` (Section 7)
