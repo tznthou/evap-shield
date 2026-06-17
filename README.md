@@ -45,8 +45,9 @@ The hook is your safety net. The patch reduces how often the hook needs to fire.
 | `bash patch-vh1.sh --status` | Check binary version, patch status, last patch info |
 | `bash patch-vh1.sh --restore` | Restore the original binary from per-hash backup |
 | `bash patch-vh1.sh --dry-run` | Preview patch without applying |
-| `bash test-evap-shield.sh` | Run the hook test suite (21 tests) |
+| `bash test-evap-shield.sh` | Run the hook test suite (25 tests) |
 | `bash test-patch-vh1.sh` | Run the patcher failure-path suite (33 tests) |
+| `bash test-install.sh` | Run the installer merge-safety suite (17 tests) |
 
 ---
 
@@ -144,8 +145,9 @@ evap-shield/
   evap-shield.sh        # PreToolUse hook — blocks {} tool calls
   install.sh            # One-command hook installer
   patch-vh1.sh          # Binary patch automation (locate → backup → patch → verify)
-  test-evap-shield.sh   # Hook test suite (21 tests)
+  test-evap-shield.sh   # Hook test suite (25 tests)
   test-patch-vh1.sh     # Patcher failure-path tests (33 tests)
+  test-install.sh       # Installer merge-safety tests (17 tests)
   FIX-PLAN.md           # Full technical analysis and rollback criteria
   README.md             # English
   README_ZH.md          # Chinese
