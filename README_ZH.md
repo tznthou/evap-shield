@@ -45,7 +45,8 @@ Hook 是安全網。Patch 降低 hook 需要觸發的頻率。
 | `bash patch-vh1.sh --status` | 查看 binary 版本、patch 狀態、上次 patch 資訊 |
 | `bash patch-vh1.sh --restore` | 從 per-hash 備份還原原始 binary |
 | `bash patch-vh1.sh --dry-run` | 預覽 patch，不實際套用 |
-| `bash test-evap-shield.sh` | 跑 21 個測試 |
+| `bash test-evap-shield.sh` | 跑 hook 測試套件（21 tests） |
+| `bash test-patch-vh1.sh` | 跑 patch failure-path 測試（33 tests） |
 
 ---
 
@@ -143,7 +144,8 @@ evap-shield/
   evap-shield.sh        # PreToolUse hook——阻擋 {} tool calls
   install.sh            # 一鍵安裝
   patch-vh1.sh          # Binary patch 自動化（定位→備份→patch→驗證）
-  test-evap-shield.sh   # 測試套件（21 tests）
+  test-evap-shield.sh   # Hook 測試套件（21 tests）
+  test-patch-vh1.sh     # patch failure-path 測試（33 tests）
   FIX-PLAN.md           # 完整技術分析與回退判定標準
   README.md             # English
   README_ZH.md          # 中文
