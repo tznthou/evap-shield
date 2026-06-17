@@ -244,7 +244,7 @@ async def append_entry(content: str, path: str):
 **重新排序**：C（MCP 防禦）降為 optional guide，E+A 為通用主線。
 原因：C 綁定在特定 MCP server（如 ccRecall），別人的環境沒有；E+A 是任何 Claude Code 用戶都能用的通用方案。
 
-**關鍵發現**：PreToolUse hook 的 payload 包含 `tool_input`（完整 args），且 exit 2 可阻擋執行。FIX-PLAN 原本寫「hook 無法看到 tool call arguments」是錯的。這讓 E 從被動偵測器升級為主動攔截器，保護範圍涵蓋 built-in tools。
+**關鍵發現**：PreToolUse hook 的 payload 包含 `tool_input`（完整 args），且 exit 2 可阻擋執行。FIX-PLAN 原本寫「hook 無法看到 tool call arguments」是錯的。這讓 E 從被動偵測器升級為主動攔截器。守備範圍是 MCP tools：built-in tool 的 `{}` 會被 Claude Code 內建 validation 在 PreToolUse hook 之前擋下（hook 收不到），MCP 的 validation 跑在 hook 之後，所以 hook 真正攔的是 MCP 的 `{}`。
 
 ```
 現在 ──────── D: Opus 4.6[1m] 觀望
@@ -253,7 +253,7 @@ async def append_entry(content: str, path: str):
                 │
 準備回 4.8 ──── E: evap-shield hook ✅ 完成
                 │   PreToolUse 攔截器，20/20 測試通過
-                │   攔 built-in + MCP tools 的 {} args
+                │   攔 MCP tools 的 {} args（built-in 由 CC 內建擋）
                 │   連續 3+ 次升級 CRITICAL + terminal instruction
                 │   一鍵安裝: bash install.sh
                 │

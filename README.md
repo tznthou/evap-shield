@@ -28,10 +28,10 @@ Two independent layers, either works alone:
 
 | Layer | What it does | Survives `claude update`? |
 |-------|-------------|---------------------------|
-| **Hook** (`evap-shield.sh`) | PreToolUse hook that inspects every tool call. Blocks execution if required arguments are missing. Warns the model to stop retrying. | Yes |
-| **Patch** (`patch-vh1.sh`) | Replaces `!Y` with `!0` in the VH1 tokenizer (2 bytes, same length). Partial strings get pushed instead of dropped. | No — re-run after each update |
+| **Patch** (`patch-vh1.sh`) | Replaces `!Y` with `!0` in the VH1 tokenizer (2 bytes, same length). Partial strings get pushed instead of dropped, so `{}` never forms at the source — for every tool. | No — re-run after each update |
+| **Hook** (`evap-shield.sh`) | PreToolUse hook that blocks `{}` calls to **MCP tools** — the one gap Claude Code's built-in validation doesn't cover (see [Design Decisions](#design-decisions)). Also logs `{}` events so you can tell whether the bug is firing. | Yes |
 
-The hook is your safety net. The patch reduces how often the hook needs to fire.
+The patch is the root fix — it stops `{}` from forming at all. The hook is the no-restart safety net for MCP tools, and your observability into whether the bug is live.
 
 ---
 
@@ -142,7 +142,7 @@ Like the patch itself, a restore takes effect on the next full restart.
 
 ```
 evap-shield/
-  evap-shield.sh        # PreToolUse hook — blocks {} tool calls
+  evap-shield.sh        # PreToolUse hook — blocks {} to MCP tools
   install.sh            # One-command hook installer
   patch-vh1.sh          # Binary patch automation (locate → backup → patch → verify)
   test-evap-shield.sh   # Hook test suite (25 tests)
@@ -182,9 +182,9 @@ We built evap-shield because waiting wasn't an option.
 
 ## Design Decisions
 
-**Hook over MCP middleware.** Our first plan was to add validation to MCP servers (schema-aware rejection of `{}`). But that only protects custom MCP tools — built-in tools like Read, Edit, and Bash are unprotected. Then we discovered that PreToolUse hooks receive the full `tool_input` payload and can block execution with exit code 2. One hook covers everything.
+**A PreToolUse hook, scoped to the MCP gap.** We considered MCP-server middleware (schema-aware rejection of `{}`) and chose a PreToolUse hook, which receives the full `tool_input` payload. Its effective scope is the MCP surface: a `{}` to a built-in tool (Read, Edit, Bash) is rejected by Claude Code's own validation, which runs *before* PreToolUse hooks, so the hook never sees it. The hook fires only for **MCP tools**, whose validation runs *after* it. Built-in tools are covered by Claude Code itself; the hook closes the MCP gap and logs `{}` events so you know the bug is live.
 
-**Two layers, not one.** The hook blocks damage but doesn't fix the parser. The patch fixes the parser but gets wiped on update. Together, the hook is the permanent safety net and the patch reduces noise. Either works alone.
+**Two layers, not one.** The patch fixes the parser at the source — every tool — but gets wiped on each update. The hook survives updates and needs no restart, but only covers the MCP gap. So the patch is the root fix, and the hook is the permanent net for the window when the patch isn't active (after an update, before you re-run it). Either works alone.
 
 **Per-hash backups, not per-version.** `--restore` must only restore the exact binary that was patched. If the user runs `claude update` between patch and restore, the backup is from a different version. Matching on SHA-256 prevents silent corruption — and the restore itself verifies the backup's hash before trusting it, then swaps it in atomically with `rename()` so an interrupted rollback can never leave a truncated binary.
 
@@ -194,7 +194,8 @@ We built evap-shield because waiting wasn't an option.
 
 ## Technical Limitations
 
-- The hook only checks tools with a hardcoded required-field map (Read, Edit, Write, Bash, NotebookEdit, `mcp__*`). New built-in tools not in this map will pass through.
+- **The hook does not protect built-in tools.** A `{}` to Read, Edit, Bash, etc. is rejected by Claude Code's own validation *before* the PreToolUse hook runs, so the hook never sees it. The required-field map lists built-ins for completeness, but in practice the hook only ever fires for **MCP tools** (`mcp__*`), whose validation runs after it. Built-in `{}` is handled by Claude Code itself, not by this hook.
+- **The patch's root-fix effect is unit-verified, not end-to-end.** 760/0 streaming-boundary unit cases confirm partial tokens are pushed instead of dropped; full end-to-end confirmation isn't observable through a server mock (the affected parser path is structurally unreachable from the outside). It's unit-proof plus structural inference.
 - The binary patch targets a specific byte pattern. If Anthropic restructures the parser, the patcher will refuse to patch (safe failure, not silent corruption).
 - The patch does not survive `claude update`. Re-run `patch-vh1.sh` after each update.
 - The hook cannot prevent the model from retrying in a loop before the hook fires. The error message is written as a terminal instruction to stop the model, but this depends on model compliance.
