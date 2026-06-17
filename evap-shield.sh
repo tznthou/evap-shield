@@ -10,6 +10,23 @@ set -euo pipefail
 
 PAYLOAD=$(cat)
 
+# jq is a hard dependency: if it's missing the shield can't inspect anything.
+# Surface that loudly (visible non-zero exit) rather than letting the JSON
+# guard below read "jq absent" as "malformed input" and fail open silently —
+# that would disable the shield with no signal, its worst failure mode.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "evap-shield: jq not found — shield INACTIVE, tool calls pass unchecked" >&2
+  exit 1
+fi
+
+# Fail open on malformed input: the VH1 bug produces *valid* JSON with an
+# empty tool_input, so a payload that isn't valid JSON is not this symptom.
+# Pass through silently instead of letting jq emit a parse error and a
+# non-zero exit (noise to the user, and a non-2 exit reads as a hook error).
+if ! printf '%s' "$PAYLOAD" | jq empty >/dev/null 2>&1; then
+  exit 0
+fi
+
 TOOL_NAME=$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // ""')
 TOOL_INPUT=$(printf '%s' "$PAYLOAD" | jq -c '.tool_input // {}')
 

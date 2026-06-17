@@ -50,6 +50,23 @@ assert_block() {
   fi
 }
 
+# Malformed payload must fail open: exit 0 AND no stderr noise (no jq parse
+# error leaking through). Stricter than assert_pass, which ignores stderr.
+assert_failopen() {
+  local desc="$1"
+  local payload="$2"
+  rm -f "$COUNTER_FILE"
+  local stderr_out exit_code=0
+  stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+  if [[ "$exit_code" -eq 0 && -z "$stderr_out" ]]; then
+    echo "  PASS: $desc"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $desc (expected silent exit 0, got exit=$exit_code stderr='$stderr_out')"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 echo "=== evap-shield.sh test suite ==="
 echo ""
 echo "── Normal tool calls (should PASS) ──"
@@ -104,6 +121,42 @@ assert_block "Write with only content (missing file_path)" \
 
 assert_block "Write with null content" \
   '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt","content":null},"session_id":"test-2"}'
+
+echo ""
+echo "── Malformed payload (should FAIL OPEN — silent exit 0) ──"
+
+assert_failopen "Non-JSON payload" \
+  'this is not json at all'
+
+assert_failopen "Truncated JSON payload" \
+  '{"tool_name":"Read","tool_inp'
+
+# Baseline sentinel, NOT a guard regression test: empty stdin is valid to
+# `jq empty` (exits 0), so this passes with or without the malformed-input
+# guard. It pins the contract "empty payload → silent pass", guarding future
+# regressions in empty-input handling, not the malformed-JSON guard itself.
+assert_failopen "Empty payload (baseline sentinel)" \
+  ''
+
+echo ""
+echo "── jq dependency missing (must error VISIBLY, not silently fail open) ──"
+# If jq disappears from PATH the shield can't inspect anything. It must exit
+# non-zero with a visible message, never silently exit 0 — that would disable
+# the shield invisibly (see the dependency guard in evap-shield.sh).
+JQLESS_BIN=$(mktemp -d)
+for cmd in cat date mkdir grep wc bash sh; do
+  src=$(command -v "$cmd" 2>/dev/null) && ln -sf "$src" "$JQLESS_BIN/"
+done
+jqless_out=$(printf '%s' '{"tool_name":"Read","tool_input":{},"session_id":"jq-missing"}' \
+  | PATH="$JQLESS_BIN" bash "$HOOK" 2>&1) && jqless_ec=0 || jqless_ec=$?
+if [[ "$jqless_ec" -ne 0 && "$jqless_ec" -ne 2 ]] && printf '%s' "$jqless_out" | grep -qi "jq"; then
+  echo "  PASS: jq missing → visible error (exit $jqless_ec, mentions jq)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: jq missing → exit=$jqless_ec out='$jqless_out' (want non-0 non-2 + jq message)"
+  FAIL=$((FAIL + 1))
+fi
+rm -rf "$JQLESS_BIN"
 
 echo ""
 echo "── Consecutive counter escalation ──"
