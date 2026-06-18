@@ -2,7 +2,7 @@
 
 *A field report on root-causing, patching, and verifying the bug where tool calls silently lose their arguments, with an honest account of what the fix does and does not cover.*
 
-*Time anchor: all binary-level findings are as of Claude Code 2.1.179 (2026-06-17). The methods below let you re-check any later build yourself.*
+*Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on 2.1.181 (§7). The methods below let you re-check any later build yourself.*
 
 ## TL;DR
 
@@ -10,7 +10,7 @@
 - **Root cause (one sub-shape of it):** a client-side streaming partial-JSON parser drops a string token when a value is cut across a streaming chunk boundary, collapsing the tool input to `{}`. We reached this independently; @in4mer filed the same analysis first in #67765.
 - **It is patchable on the client.** Because this sub-shape lives in the client parser, a single two-byte binary patch (`!Y`→`!0`) stops the token from being discarded. As far as we found, evap-shield is the only tool that patches the parser itself rather than cleaning up after the fact.
 - **The patch is verified correct by a white-box unit test: 760 truncation cases, 0 regressions.** It compares the original and patched parser byte-for-byte at every streaming cut point.
-- **The official 2.1.179 did not fix it.** A 178↔179 binary diff shows the parser byte unchanged; the changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
+- **Official builds through 2.1.181 have not fixed it.** A 178↔179 binary diff shows the parser byte unchanged, and 2.1.181's Bun 1.4 upgrade reshuffled the minified names while leaving the parser logic identical (§7). The changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
 - **Honest boundary:** the patch covers one corner of a larger bug cluster. A second camp attributes other failures in the same cluster to the model emitting malformed markup, which a client patch cannot touch. We could not reproduce one of @in4mer's four points on 2.1.179. And the parser's primary failure path is, by construction, not reachable from a server-side mock, so the unit test rather than an end-to-end test is what verifies the fix.
 
 ## 1. The symptom: a tool call with no arguments
@@ -20,6 +20,8 @@ While writing this investigation, the tool I was using produced a clean example 
 I was wrong, and how I found out is the point. A single screenshot, `API Error: 529 Overloaded`, showed the real cause: a server-side interruption that cut the response stream mid-flight, between one block and the next. Not the parser bug. Not the agent skipping a step. A third cause I had not even listed.
 
 That matters because the cause I jumped to and the cause that actually happened produce the *same observable symptom*: an action that reports success while its payload silently disappears. Across this whole bug cluster that is the recurring trap. The symptoms converge, the root causes do not, and you cannot tell them apart without evidence. (The 529 interruption is exactly the connection-drop shape that Section 6 shows *bypasses* the parser bug rather than triggering it.)
+
+It happened a second time as I was committing this very writeup: a tool call came back *malformed and could not be parsed*, which is the exact headline symptom of #62123. This time it really looked like the bug, except the retry succeeded immediately, whereas #62123's signature is that the retry *also* fails. Same symptom, opposite tell, and once again not the cause I was about to write about.
 
 The bug this report is about looks like this: a model decides to call a tool, the call goes out, and its `input` arrives as `{}`. The model reached for a tool and came back empty-handed. The same root cause surfaces downstream as three distinct symptoms:
 
@@ -74,7 +76,7 @@ The fix has three parts, and dropping any one re-bricks the binary:
 
 On 2.1.179, live: patched, runs (exit 0, no brick), and rolls back cleanly. The binary shrinks by 1.28 MB in the process (226,082,208 → 224,766,816 bytes). That is the factory signature section being swapped for a smaller ad-hoc one, not the patch; the parser change itself is two same-length bytes.
 
-The honest cost: a native update overwrites the patch. Every `claude update` returns the binary to its unpatched state, and the patch has to be re-applied. You are modifying a signed, vendored binary on your own machine; there is a backup, there are safety checks, and it is still at your own risk. This is defensive research on locally-installed software, not an invitation to go modifying binaries casually.
+The honest cost: a native update overwrites the patch. Every `claude update` returns the binary to its unpatched state, and the patch has to be re-applied. "A full restart" can itself be subtle: if a launcher or wrapper keeps the binary resident, switching windows or sessions may not release the running inode — check with `lsof <binary>` that nothing still holds it, both before patching and before expecting the patch to take effect. You are modifying a signed, vendored binary on your own machine; there is a backup, there are safety checks, and it is still at your own risk. This is defensive research on locally-installed software, not an invitation to go modifying binaries casually.
 
 ## 6. What we could not prove, and why
 
@@ -96,6 +98,8 @@ One counterintuitive consequence: now that the client preserves a partial respon
 
 Time anchor again: this is 2.1.179 on 2026-06-17. Re-run the two diffs on any later build to check it for yourself.
 
+**Update, 2.1.181 (2026-06-18).** I re-ran both diffs on the next build (2.1.180 was skipped). The verdict holds — the parser is still unpatched — and the *way* it held is the point. A literal search for the old `,!Y)q.push` now finds nothing, yet the parser logic is structurally identical; only the names changed. The cause is in the changelog: the bundled Bun runtime was upgraded to 1.4, and the new bundler reshuffled the entire minified identifier space. The string handler's variables went from `Y/q/$` (2.1.179) to `l/n/a` (2.1.181), and the factory binary dropped from 226,082,208 to 215,193,056 bytes (~11 MB) — a new minifier, not a parser change. This is the section's thesis made concrete: a fixed byte-pattern rots across builds, so the durable anchor is the *structure* — `,!<flag>)<recv>.push({type:"string",value:<acc>})` — not the literal bytes. The same two-byte fix still applies; only the way you locate it must be version-agnostic.
+
 ## 8. Honest scope: one corner of the cluster
 
 evap-shield's patch covers Camp A's sub-shape. It is not the whole cluster. The community splits tool-call parsing failures into several sub-patterns, and Camp B's malformed-markup route is a different one. That is exactly why, in our own harness, the patched binary still produced `{}` on a clean truncation: that path hits the secondary fallback, not the primary parser drop (Section 6). The fix is real. It is one corner.
@@ -106,6 +110,6 @@ The rest of the landscape is complementary, not competing. `claude-code-unpoison
 
 - Issues: `anthropics/claude-code` #62123, #67765 (root cause, @in4mer), #63583
 - evap-shield: `github.com/tznthou/evap-shield` (PreToolUse hook + binary patch)
-- Parser patch pattern: `,!Y)` → `,!0)` (same length, no offset shift)
+- Parser patch pattern, 2.1.179: `,!Y)` → `,!0)` (same length, no offset shift). Version-specific: the minified names reshuffle between builds (§7), so locate by the structure `…push({type:"string",value:…})`, not the literal bytes.
 - Verification: white-box unit test, 760 truncation cases, 0 regressions
 - Binary-diff method: parser-byte anchor + short-string `comm` (Section 7)
