@@ -28,7 +28,7 @@ Two independent layers, either works alone:
 
 | Layer | What it does | Survives `claude update`? |
 |-------|-------------|---------------------------|
-| **Patch** (`patch-vh1.sh`) | Replaces `!Y` with `!0` in the VH1 tokenizer (2 bytes, same length). Partial strings get pushed instead of dropped, so `{}` never forms at the source — for every tool. | No — re-run after each update |
+| **Patch** (`patch-vh1.sh`) | Flips the negated gate flag to `!0` in the VH1 tokenizer (1 byte, same length). The match is structural — anchored on the parser's invariant, not minified variable names — so it survives bundler reshuffles across versions (e.g. the Bun 1.4 rename in 2.1.181). Partial strings get pushed instead of dropped, so `{}` never forms at the source — for every tool. | No — re-run after each update |
 | **Hook** (`evap-shield.sh`) | PreToolUse hook that blocks `{}` calls to **MCP tools** — the one gap Claude Code's built-in validation doesn't cover (see [Design Decisions](#design-decisions)). Also logs `{}` events so you can tell whether the bug is firing. | Yes |
 
 The patch is the root fix — it stops `{}` from forming at all. The hook is the no-restart safety net for MCP tools, and your observability into whether the bug is live.
@@ -46,7 +46,7 @@ The patch is the root fix — it stops `{}` from forming at all. The hook is the
 | `bash patch-vh1.sh --restore` | Restore the original binary from per-hash backup |
 | `bash patch-vh1.sh --dry-run` | Preview patch without applying |
 | `bash test-evap-shield.sh` | Run the hook test suite (25 tests) |
-| `bash test-patch-vh1.sh` | Run the patcher failure-path suite (33 tests) |
+| `bash test-patch-vh1.sh` | Run the patcher failure-path suite (45 tests) |
 | `bash test-install.sh` | Run the installer merge-safety suite (17 tests) |
 
 ---
@@ -146,11 +146,14 @@ evap-shield/
   install.sh            # One-command hook installer
   patch-vh1.sh          # Binary patch automation (locate → backup → patch → verify)
   test-evap-shield.sh   # Hook test suite (25 tests)
-  test-patch-vh1.sh     # Patcher failure-path tests (33 tests)
+  test-patch-vh1.sh     # Patcher failure-path tests (45 tests)
   test-install.sh       # Installer merge-safety tests (17 tests)
   FIX-PLAN.md           # Full technical analysis and rollback criteria
   README.md             # English
   README_ZH.md          # Chinese
+  CHANGELOG.md          # Changelog (English)
+  CHANGELOG_ZH.md       # Changelog (Chinese)
+  docs/vh1-investigation.md  # Full VH1 bug investigation
 ```
 
 ---
@@ -196,7 +199,7 @@ We built evap-shield because waiting wasn't an option.
 
 - **The hook does not protect built-in tools.** A `{}` to Read, Edit, Bash, etc. is rejected by Claude Code's own validation *before* the PreToolUse hook runs, so the hook never sees it. The required-field map lists built-ins for completeness, but in practice the hook only ever fires for **MCP tools** (`mcp__*`), whose validation runs after it. Built-in `{}` is handled by Claude Code itself, not by this hook.
 - **The patch's root-fix effect is unit-verified, not end-to-end.** 760/0 streaming-boundary unit cases confirm partial tokens are pushed instead of dropped; full end-to-end confirmation isn't observable through a server mock (the affected parser path is structurally unreachable from the outside). It's unit-proof plus structural inference.
-- The binary patch targets a specific byte pattern. If Anthropic restructures the parser, the patcher will refuse to patch (safe failure, not silent corruption).
+- The binary patch anchors on a structural invariant in the parser, not minified variable names, so it survives bundler/minifier reshuffles across versions (verified across the 2.1.181 Bun 1.4 rename). If Anthropic restructures the parser itself, the patcher refuses to patch rather than corrupt it (safe failure, not silent corruption).
 - The patch does not survive `claude update`. Re-run `patch-vh1.sh` after each update.
 - The hook cannot prevent the model from retrying in a loop before the hook fires. The error message is written as a terminal instruction to stop the model, but this depends on model compliance.
 
