@@ -29,9 +29,17 @@ FAIL=0
 ROOT=$(mktemp -d "/tmp/test-patch-vh1.XXXXXX")
 trap 'rm -rf "$ROOT"' EXIT
 
-# Exact VH1 byte patterns patch-vh1.sh looks for.
-BUG=',!Y)q.push({type:"string"'
-FIX=',!0)q.push({type:"string"'
+# Full VH1 structural sites patch-vh1.sh matches: ,!<flag>)<recv>.push(...).
+# BUG/FIX carry the 2.1.181 minified names (l/n/a); ALT_* carry the 2.1.179 names
+# (Y/q/$) — same structure, different identifiers — to prove the patcher binds to
+# structure, not to a specific version's variable names (the Bun 1.4 reshuffle).
+BUG=',!l)n.push({type:"string",value:a})'
+FIX=',!0)n.push({type:"string",value:a})'
+ALT_BUG=',!Y)q.push({type:"string",value:$})'
+ALT_FIX=',!0)q.push({type:"string",value:$})'
+# children.push near-miss (value followed by ,offset): single source of truth
+# shared by the `mixed` fixture and case 3d's "left intact" assertion.
+CHILD=',!m)x.push({type:"string",value:b,offset:o})'
 
 ok() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 bad() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -47,13 +55,19 @@ sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 make_fake_bin() {
   local dest="$1" kind="$2"
   case "$kind" in
-    vulnerable) printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' "$BUG" >"$dest" ;;
-    patched)    printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' "$FIX" >"$dest" ;;
-    unknown)    printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# no vh1 marker\n' >"$dest" ;;
-    double)     printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n# %s\n' "$BUG" "$BUG" >"$dest" ;;
-    # Launches fine while vulnerable (!Y); once patched (!0) `--version` exits 1,
+    vulnerable)     printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' "$BUG" >"$dest" ;;
+    vulnerable_alt) printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' "$ALT_BUG" >"$dest" ;;
+    patched)        printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' "$FIX" >"$dest" ;;
+    unknown)        printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# no vh1 marker\n' >"$dest" ;;
+    double)         printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n# %s\n' "$BUG" "$BUG" >"$dest" ;;
+    # Negative space (Codex review): shapes that must NOT be patched as the VH1 site.
+    numguard)       printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' ',!1)n.push({type:"string",value:a})' >"$dest" ;;
+    multichar)      printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' ',!aa)n.push({type:"string",value:a})' >"$dest" ;;
+    childnode)      printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n' ',!l)n.push({type:"string",value:a,offset:o})' >"$dest" ;;
+    mixed)          printf '#!/bin/bash\necho "2.1.179 (Claude Code)"\n# %s\n# %s\n' "$BUG" "$CHILD" >"$dest" ;;
+    # Launches fine while vulnerable (!l); once patched (!0) `--version` exits 1,
     # so the post-patch smoke_test_cli fails and triggers abort_and_restore.
-    smokefail)  printf '#!/bin/bash\ngrep -qF %s "$0" && exit 1\necho "2.1.179 (Claude Code)"\n# %s\n' "',!0)q.push'" "$BUG" >"$dest" ;;
+    smokefail)      printf '#!/bin/bash\ngrep -qF %s "$0" && exit 1\necho "2.1.179 (Claude Code)"\n# %s\n' "'$FIX'" "$BUG" >"$dest" ;;
   esac
   chmod +x "$dest"
 }
@@ -107,6 +121,40 @@ grep -qF "$BUG" "$H/$BIN_REL" && bad "patch: BUG bytes still present" || ok "pat
 BK="$H/state/patch-backups/${ORIG:0:12}.bin"
 [[ -f "$BK" ]] && ok "patch: backup created" || bad "patch: no backup"
 assert "patch: backup == original bytes" "$(sha "$BK")" "$ORIG"
+
+# ── 3b. version-agnostic: patch a binary with DIFFERENT minified names ──
+# Complements #3: #3's BUG fixture uses the 2.1.181 names (l/n/a) — the shape
+# that actually broke the old hardcoded ',!Y)q.push' matcher. This case feeds the
+# OTHER shape (2.1.179 names Y/q/$) to prove the structural matcher patches it
+# regardless of which identifiers the minifier picked. The two fixtures together
+# pin both directions: neither variable set may be hardcoded.
+H=$(new_home c3b vulnerable_alt)
+run_patch "$H"
+assert "alt-names: exit 0" "$RC" "0"
+assert_has "alt-names: patched to FIX bytes" "$H/$BIN_REL" "$ALT_FIX"
+grep -qF "$ALT_BUG" "$H/$BIN_REL" && bad "alt-names: BUG bytes still present" || ok "alt-names: BUG bytes gone"
+
+# ── 3c. negative space: shapes that must NOT be treated as the VH1 site ──
+# Locks the matcher's safety boundary (Codex review): a digit guard (!1 is a
+# minified `false`, not a variable), a multi-char flag, and a children.push
+# near-miss (value followed by ,offset — excluded by the }) anchor). All three
+# must be classified unknown and refused, never silently mis-patched.
+for kind in numguard multichar childnode; do
+  H=$(new_home "neg-$kind" "$kind")
+  run_patch "$H"
+  assert "neg/$kind: refused (exit 1)" "$RC" "1"
+  assert_has "neg/$kind: reported unknown" "$H/err" "not found"
+done
+
+# ── 3d. mixed: a real VH1 site next to a children.push near-miss ──
+# Real-binary layout — the string push and a children.push coexist. The matcher
+# must patch ONLY the VH1 site and leave the children.push ($CHILD) byte-for-byte
+# intact.
+H=$(new_home c3d mixed)
+run_patch "$H"
+assert "mixed: exit 0" "$RC" "0"
+assert_has "mixed: VH1 site patched" "$H/$BIN_REL" "$FIX"
+assert_has "mixed: children.push left intact" "$H/$BIN_REL" "$CHILD"
 
 # ── 4. already-patched binary: no-op, exit 0 ──
 H=$(new_home c4 patched)

@@ -1,12 +1,15 @@
 #!/bin/bash
 # patch-vh1.sh — Patch Claude Code VH1 streaming parser bug
 #
-# Replaces `!Y` with `!0` in the VH1 string tokenizer to prevent
-# silent string token drops that cascade into empty tool arguments.
+# Flips the negated gate flag to `!0` in the VH1 string tokenizer to prevent
+# silent string token drops that cascade into empty tool arguments. The match is
+# structural (not tied to minified variable names), so it survives bundler /
+# minifier reshuffles across Claude Code versions — e.g. the Bun 1.4 upgrade in
+# 2.1.181 renamed the whole identifier space and broke the old literal match.
 #
 # Usage: bash patch-vh1.sh [--dry-run] [--restore] [--status]
 #
-# The patch is same-length (2 bytes) so it doesn't shift any offsets.
+# The patch flips one byte (same length) so it doesn't shift any offsets.
 # A per-hash backup is created before each patch.
 #
 # See: https://github.com/anthropics/claude-code/issues/62123
@@ -197,13 +200,38 @@ abort_and_restore() {
 }
 
 # ── Pattern detection ──
+# Version-agnostic: don't hardcode minified variable names — they get reshuffled
+# whenever the bundler/minifier changes (the Bun 1.4 upgrade in 2.1.181 renamed
+# the whole identifier space, breaking a literal ',!Y)q.push' match). Anchor on
+# the structural invariant that survives minification:
+#   ,!<flag>)<recv>.push({type:"string",value:<acc>})
+# `type:"string"` is a data literal (an AST node tag), not an identifier, so the
+# minifier never touches it. <flag> is the single-char local whose negation
+# gates the push; we flip !<flag> -> !0 to always keep the (possibly partial)
+# string token. <flag> must be an identifier char or `0` ([A-Za-z_$0]); digits
+# 1-9 are excluded because !1/!2 are minified `false` literals, not variables —
+# matching them could mis-flag and mis-patch an unrelated site. <recv>/<acc> are
+# matched loosely (locate only, never rewritten).
+# The `})` right after value:<acc> separates the VH1 string push from the
+# children.push({type:"string",value:X,offset:...}) node, which carries more keys.
 detect_pattern() {
-  python3 -c "
-data = open('$CLI_BIN', 'rb').read()
-bug = b',!Y)q.push({type:\"string\"'
-fix = b',!0)q.push({type:\"string\"'
-print(f'{data.count(bug)} {data.count(fix)}')
-"
+  python3 - "$CLI_BIN" <<'PY'
+import re, sys
+data = open(sys.argv[1], 'rb').read()
+PAT = re.compile(
+    rb',!([A-Za-z_$0])\)'                # ,!<flag>)  identifier char or 0; never 1-9
+    rb'(?:[A-Za-z_$][A-Za-z_$0-9]*)'     # <recv>     push receiver (locate only)
+    rb'\.push\(\{type:"string",value:'   # .push({type:"string",value:
+    rb'(?:[A-Za-z_$][A-Za-z_$0-9]*)\}\)' # <acc>})    value then immediate close
+)
+vuln = patched = 0
+for m in PAT.finditer(data):
+    if m.group(1) == b'0':
+        patched += 1
+    else:
+        vuln += 1
+print(f'{vuln} {patched}')
+PY
 }
 
 SEARCH_RESULT=$(detect_pattern)
@@ -230,8 +258,16 @@ if $STATUS; then
     echo "Signature: $SIGN_STATUS"
   fi
   if [[ -f "$STATE_FILE" ]]; then
-    LAST_VERSION=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('version','?'))" 2>/dev/null || echo "?")
-    LAST_SHA=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('patched_sha256','?'))" 2>/dev/null || echo "?")
+    LAST_VERSION=$(python3 - "$STATE_FILE" <<'PY' 2>/dev/null || echo "?"
+import json, sys
+print(json.load(open(sys.argv[1])).get('version','?'))
+PY
+)
+    LAST_SHA=$(python3 - "$STATE_FILE" <<'PY' 2>/dev/null || echo "?"
+import json, sys
+print(json.load(open(sys.argv[1])).get('patched_sha256','?'))
+PY
+)
     echo "Last patched: v$LAST_VERSION (sha256: ${LAST_SHA:0:12}...)"
   fi
   if [[ "$PATCH_STATUS" == "vulnerable" ]]; then
@@ -257,13 +293,14 @@ if $RESTORE; then
     exit 1
   fi
 
-  RESTORE_INFO=$(python3 -c "
-import json
-s = json.load(open('$STATE_FILE'))
+  RESTORE_INFO=$(python3 - "$STATE_FILE" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
 print(s.get('original_sha256',''))
 print(s.get('patched_sha256',''))
 print(s.get('backup_path',''))
-")
+PY
+)
   ORIG_SHA=$(echo "$RESTORE_INFO" | sed -n '1p')
   PATCHED_SHA=$(echo "$RESTORE_INFO" | sed -n '2p')
   BACKUP_PATH=$(echo "$RESTORE_INFO" | sed -n '3p')
@@ -301,7 +338,11 @@ if [[ "$PATCH_STATUS" == "patched" ]]; then
   # refresh state — a stale backup/SHA pairing could later make --restore
   # overwrite the wrong binary. Warn and leave recorded state untouched.
   if [[ -f "$STATE_FILE" ]]; then
-    RECORDED_SHA=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('patched_sha256',''))" 2>/dev/null || echo "")
+    RECORDED_SHA=$(python3 - "$STATE_FILE" <<'PY' 2>/dev/null || echo ""
+import json, sys
+print(json.load(open(sys.argv[1])).get('patched_sha256',''))
+PY
+)
     if [[ -n "$RECORDED_SHA" && "$CLI_SHA256" != "$RECORDED_SHA" ]]; then
       echo "Warning: binary SHA differs from recorded patch state — Claude Code may have been updated." >&2
       echo "If so, run 'bash $0 --restore' then re-patch." >&2
@@ -333,7 +374,7 @@ if [[ "$BUG_COUNT" -gt 1 ]]; then
 fi
 
 echo "Found bug pattern: 1 occurrence"
-echo "Patch: !Y → !0 (2 bytes, same length)"
+echo "Patch: !<flag> → !0 (1 byte, same length)"
 echo ""
 
 if $DRY_RUN; then
@@ -353,22 +394,31 @@ else
 fi
 
 # ── Patch ──
-python3 -c "
-data = open('$CLI_BIN', 'rb').read()
-bug = b',!Y)q.push({type:\"string\"'
-fix = b',!0)q.push({type:\"string\"'
-
-assert data.count(bug) == 1, f'Expected 1 occurrence, found {data.count(bug)}'
-assert len(bug) == len(fix), 'Pattern length mismatch'
-
-patched = data.replace(bug, fix, 1)
+# Same structural regex as detect_pattern(): find the one vulnerable
+# ,!<flag>)...push({type:"string",value:...}) site and flip the single flag byte
+# to '0'. Editing exactly one byte (not replacing a string) guarantees the file
+# length is unchanged, so no Mach-O offsets shift.
+python3 - "$CLI_BIN" <<'PY'
+import re, sys
+path = sys.argv[1]
+data = open(path, 'rb').read()
+PAT = re.compile(
+    rb',!([A-Za-z_$0])\)'                # flag: identifier char or 0, never 1-9 (see detect_pattern)
+    rb'(?:[A-Za-z_$][A-Za-z_$0-9]*)'
+    rb'\.push\(\{type:"string",value:'
+    rb'(?:[A-Za-z_$][A-Za-z_$0-9]*)\}\)'
+)
+vuln = [m for m in PAT.finditer(data) if m.group(1) != b'0']
+assert len(vuln) == 1, f'Expected 1 vulnerable site, found {len(vuln)}'
+m = vuln[0]
+flag = m.group(1).decode()
+pos = m.start(1)               # offset of the single flag byte
+assert m.end(1) - pos == 1, 'flag is not a single byte'
+patched = data[:pos] + b'0' + data[pos+1:]
 assert len(patched) == len(data), 'File size changed'
-assert patched.count(fix) == 1
-assert patched.count(bug) == 0
-
-open('$CLI_BIN', 'wb').write(patched)
-print('Patch applied.')
-"
+open(path, 'wb').write(patched)
+print(f'Patch applied: !{flag} -> !0 at offset {pos}.')
+PY
 
 BYTE_PATCH_SIZE=$(wc -c < "$CLI_BIN" | tr -d ' ')
 # resign is a bare call under `set -e`: a non-zero return would abort the
@@ -399,21 +449,24 @@ if [[ "$V_BUG" -eq 0 && "$V_FIX" -eq 1 && "$CLI_SIZE" -eq "$BYTE_PATCH_SIZE" ]];
   fi
 
   mkdir -p "$STATE_DIR"
-  python3 -c "
-import json
+  PATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  python3 - "$STATE_FILE" "$CLI_BIN" "$CLI_VERSION" "$CLI_SHA256" "$PATCHED_SHA256" "$CLI_SIZE" "$PATCHED_SIZE" "$BACKUP_PATH" "$PATCHED_AT" <<'PY'
+import json, sys
+(_, state_file, binary, version, orig_sha, patched_sha,
+ orig_size, size, backup_path, patched_at) = sys.argv
 state = {
     'schema': 1,
-    'binary': '$CLI_BIN',
-    'version': '$CLI_VERSION',
-    'original_sha256': '$CLI_SHA256',
-    'patched_sha256': '$PATCHED_SHA256',
-    'original_size': $CLI_SIZE,
-    'size': $PATCHED_SIZE,
-    'backup_path': '$BACKUP_PATH',
-    'patched_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
+    'binary': binary,
+    'version': version,
+    'original_sha256': orig_sha,
+    'patched_sha256': patched_sha,
+    'original_size': int(orig_size),
+    'size': int(size),
+    'backup_path': backup_path,
+    'patched_at': patched_at,
 }
-json.dump(state, open('$STATE_FILE', 'w'), indent=2)
-"
+json.dump(state, open(state_file, 'w'), indent=2)
+PY
   echo ""
   echo "Patch verified. State saved to $STATE_FILE"
   echo "Restart Claude Code for the fix to take effect."
