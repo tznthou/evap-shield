@@ -106,6 +106,14 @@ evap-shield's patch covers Camp A's sub-shape. It is not the whole cluster. The 
 
 The rest of the landscape is complementary, not competing. `claude-code-unpoison` rewinds a poisoned session after the fact. `cc-safe-setup` classifies incidents and recovers at the hook layer. @in4mer's #67765 is the sharpest root-cause writeup of the bunch. Each covers a piece. evap-shield's piece is patching the one parser sub-shape we could reliably reproduce and verify: no more than that, and that much for real.
 
+## 9. Who runs the verification we couldn't
+
+One sentence in Section 6 is worth returning to: the unreachable end-to-end test is "a structural boundary of the harness, not a missing tool." That is true — and, on its own, it closes a question it should open. Set it beside the other sentence from that section — the primary path "requires the client to actively commit a mid-stream partial buffer, something only the interactive TUI's abort-and-finalize handler does" — and a conclusion the report has carried without stating falls out.
+
+If the primary path fires only in a live TUI session, and no controlled harness can reach it, then the only place the patch's primary-path efficacy can ever be observed is a real session on a real machine. Ours, or yours. The unit test proves the byte-level behaviour is correct (Section 4); it cannot prove the fix lands on the path that bit you in production, because that path does not exist inside the test. So "a structural boundary of the harness" is the honest engineering description, and it is at the same time a transfer: the end-to-end verification we could not run does not disappear, it moves downstream to whoever runs the patched binary. Each person who patches is, on the primary path, the first-line observer of an outcome we never got to watch.
+
+I'd rather name that than leave it in neutral terms. It is not a confession either: the byte-level change is verified at the unit layer (Section 4), the patch is fully reversible with a backup and safety checks (Section 5), and upstream has shipped no fix through 2.1.181 (Section 7). The observer is informed and the risk is reversible. But informed is the precise word, not proven. If you patch, you are not consuming an efficacy demonstrated end to end; on the primary path, you are where that proof finally happens.
+
 ## References
 
 - Issues: `anthropics/claude-code` #62123, #67765 (root cause, @in4mer), #63583

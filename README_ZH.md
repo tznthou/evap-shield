@@ -11,6 +11,31 @@ Claude Code VH1 streaming parser bug 的防禦工具包。這個 bug 會讓 tool
 
 ---
 
+## 使用前須知
+
+evap-shield 有兩層獨立防禦，風險屬性不同。動手前請先讀這段，再決定要跑哪一層。
+
+**Hook 是低風險的那層。** `install.sh` 安裝的是一個 PreToolUse hook，只*偵測*並阻擋送給 MCP tool 的 `{}` 呼叫。它完全不碰 Claude Code binary，要移除也只是刪掉一個檔案和一條 settings 設定。
+
+**Binary patch 是根治層——但它是對簽章 binary 的非官方修改。** `patch-vh1.sh` 會改磁碟上的 Claude Code CLI binary，翻轉 parser 裡的一個 flag。macOS 上接著會對 binary 做 ad-hoc 重簽，用一個本地簽章取代原廠的 Developer ID 簽章——沒有 Anthropic 的金鑰可重簽，這是讓本地 patch 過的 Mach-O 能啟動的唯一辦法。它跑得起來，但已經不是 Anthropic 出廠的那個 binary 了。
+
+**它的療效是單元驗證，不是端到端驗證。** 一個白盒單元測試把原始與 patch 後的 parser 並排跑過 760 個 streaming-truncation 案例，0 regression；其餘是結構推論。沒有端到端的確認，原因很具體：受影響 parser 的 primary 失效路徑從 server-side mock 結構性不可達——只有真實互動 TUI 的 abort-and-finalize handler 才會 commit 那個觸發它的 mid-stream buffer，所以這個修復沒辦法在受控的 harness 裡端到端跑出來。單元測試是目前能拿到的最強驗證，它的效力到哪裡、我們就誠實講到哪裡。
+
+**使用條款請自己確認。** 修改廠商的簽章 binary *可能*牽涉 Anthropic 的使用條款（Terms of Service）。我們沒有研究過條文，不對任何一方下判斷——如果你在意這點，請自己讀過條款再決定要不要 patch。
+
+**風險自負，且完全可回退。** 這是對你自己機器上的軟體做的防禦性研究，不是叫你隨便去改 binary。有 per-hash 備份、任何一步失敗就自動回退、以及一行指令還原（見 [還原 patch](#還原-patch)）——但 binary 在你的機器上，決定權也在你。
+
+### 你該跑哪一層？
+
+| 如果你… | 跑這個 | 你會得到 |
+|---------|--------|----------|
+| 想保守一點——不想動 binary，或在意使用條款 | **只裝 hook**：`bash install.sh` | 偵測加上阻擋 MCP `{}`，完全不動 Anthropic 出廠的東西 |
+| 想從源頭修 parser，並接受改簽章 binary 的風險 | **再加 patch**：`bash patch-vh1.sh` | 透過上述非官方 binary 修改，讓每個 tool 的 `{}` 從源頭就不形成 |
+
+這是個*風險*問題——你願意跑哪一層。它跟下面的 [回退判定標準](#回退判定標準) 是兩回事，那個是*症狀*問題——bug 活躍到什麼程度才值得 patch。
+
+---
+
 ## 這是什麼 Bug？
 
 Claude Code 的 streaming JSON parser 裡有一個 string tokenizer（minified 後叫 `VH1`），當 JSON string 值剛好被 streaming chunk 切斷時，parser 會靜默丟掉整個 token。接下來三層 parser 連鎖反應，最終 `JSON.parse("{}")` 成功——之後同一 session 裡同一個 tool 的每次呼叫都會送出空參數。

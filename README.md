@@ -11,6 +11,31 @@ Defense toolkit for the Claude Code VH1 streaming parser bug that silently turns
 
 ---
 
+## Before You Use This
+
+evap-shield ships two independent layers with different risk profiles. Read this before choosing which to run.
+
+**The hook is low-risk.** `install.sh` installs a PreToolUse hook that only *detects* and blocks `{}` calls to MCP tools. It never touches the Claude Code binary, and uninstalling is deleting one file and one settings entry.
+
+**The binary patch is the root fix — and an unofficial modification of a signed binary.** `patch-vh1.sh` edits the Claude Code CLI binary on disk to flip one parser flag. On macOS it then ad-hoc re-signs the binary, replacing the factory Developer ID signature with a local one — there's no Anthropic key to re-sign with, so this is the only way a locally-patched Mach-O will launch. It runs, but it is no longer the binary Anthropic shipped.
+
+**Its effectiveness is unit-verified, not end-to-end verified.** A white-box unit test runs the original and patched parser side by side across 760 streaming-truncation cases with 0 regressions; the rest is structural inference. There is no end-to-end confirmation, for a concrete reason: the affected parser's primary failure path is structurally unreachable from a server-side mock — only the real interactive TUI's abort-and-finalize handler commits the mid-stream buffer that triggers it, so the fix cannot be exercised end to end in a controlled harness. The unit test is the strongest verification available, and this is exactly how far it reaches.
+
+**Terms of Service is yours to check.** Modifying a vendor's signed binary *may* have implications under Anthropic's Terms of Service. We have not assessed the terms and make no claim either way — if that matters to you, read them and decide for yourself before patching.
+
+**At your own risk, and fully reversible.** This is defensive research on software installed on your own machine, not an invitation to modify binaries casually. There's a per-hash backup, automatic rollback on any failed step, and a one-command restore (see [Undoing the Patch](#undoing-the-patch)) — but the binary is on your machine, and the call is yours.
+
+### Which layer should you run?
+
+| If you... | Run | What you get |
+|-----------|-----|--------------|
+| Want to stay conservative — don't want to touch the binary, or care about ToS | **Hook only**: `bash install.sh` | Detection and blocking of MCP `{}`, without modifying anything Anthropic shipped |
+| Want to fix the parser at its source and accept the risk of modifying a signed binary | **Add the patch**: `bash patch-vh1.sh` | `{}` stopped at the source for every tool, via the unofficial binary modification above |
+
+This is a *risk* question — which layer you're comfortable running. It's separate from [Rollback Criteria](#rollback-criteria) below, which is a *symptom* question — when the bug is active enough to be worth patching.
+
+---
+
 ## What's the Bug?
 
 Claude Code's streaming JSON parser has a flaw in its string tokenizer (function `VH1` in the minified bundle). When a JSON string value is split across streaming chunks, the parser silently drops the entire token. This cascades through three more parser layers until `JSON.parse("{}")` succeeds — and every subsequent call to that tool in the same session sends empty arguments.
