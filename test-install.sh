@@ -110,5 +110,35 @@ fi
 assert_jq "missing source: settings.json left untouched" "${THOME}/.claude/settings.json" '. == {}'
 
 echo ""
+echo "── SessionStart (check-update) hook ──"
+
+SS_FILTER='[.hooks.SessionStart[]? | select(.hooks[]?.command | test("check-update"))] | length'
+
+# S1. Empty settings — SessionStart check-update added once, with matcher + --json
+new_home ss_empty '{}'
+HOME="$THOME" bash "$INSTALLER" >/dev/null 2>&1
+assert_jq "SessionStart check-update added once" "${THOME}/.claude/settings.json" "$SS_FILTER == 1"
+assert_jq "SessionStart matcher set" "${THOME}/.claude/settings.json" '.hooks.SessionStart[0].matcher == "startup|resume|clear"'
+assert_jq "SessionStart command has --json" "${THOME}/.claude/settings.json" '.hooks.SessionStart[0].hooks[0].command | test("check-update.sh --json")'
+if [[ -x "${THOME}/.claude/hooks/check-update.sh" ]]; then pass "check-update.sh copied + executable"; else fail "check-update.sh not copied"; fi
+# PreToolUse must still be added in the same run
+assert_jq "PreToolUse also added" "${THOME}/.claude/settings.json" "$EVAP_FILTER == 1"
+
+# S2. Idempotent — 2nd run doesn't duplicate SessionStart
+HOME="$THOME" bash "$INSTALLER" >/dev/null 2>&1
+assert_jq "SessionStart still once after 2 runs" "${THOME}/.claude/settings.json" "$SS_FILTER == 1"
+
+# S3. Existing user SessionStart hook preserved, check-update appended
+new_home ss_user '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"/my/start.sh"}]}]}}'
+HOME="$THOME" bash "$INSTALLER" >/dev/null 2>&1
+assert_jq "keeps user SessionStart hook" "${THOME}/.claude/settings.json" '[.hooks.SessionStart[] | select(.hooks[]?.command == "/my/start.sh")] | length == 1'
+assert_jq "appends check-update (SessionStart now 2)" "${THOME}/.claude/settings.json" '.hooks.SessionStart | length == 2'
+
+# S4. dry-run must not copy check-update.sh
+new_home ss_dry '{}'
+HOME="$THOME" bash "$INSTALLER" --dry-run >/dev/null 2>&1
+if [[ ! -f "${THOME}/.claude/hooks/check-update.sh" ]]; then pass "dry-run: check-update not copied"; else fail "dry-run: check-update copied"; fi
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
