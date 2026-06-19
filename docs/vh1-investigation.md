@@ -2,7 +2,7 @@
 
 *A field report on root-causing, patching, and verifying the bug where tool calls silently lose their arguments, with an honest account of what the fix does and does not cover.*
 
-*Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on 2.1.181 (§7). The methods below let you re-check any later build yourself.*
+*Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on 2.1.181 and 2.1.183 (§7). The methods below let you re-check any later build yourself.*
 
 ## TL;DR
 
@@ -10,7 +10,7 @@
 - **Root cause (one sub-shape of it):** a client-side streaming partial-JSON parser drops a string token when a value is cut across a streaming chunk boundary, collapsing the tool input to `{}`. We reached this independently; @in4mer filed the same analysis first in #67765.
 - **It is patchable on the client.** Because this sub-shape lives in the client parser, a single two-byte binary patch (`!Y`→`!0`) stops the token from being discarded. As far as we found, evap-shield is the only tool that patches the parser itself rather than cleaning up after the fact.
 - **The patch is verified correct by a white-box unit test: 760 truncation cases, 0 regressions.** It compares the original and patched parser byte-for-byte at every streaming cut point.
-- **Official builds through 2.1.181 have not fixed it.** A 178↔179 binary diff shows the parser byte unchanged, and 2.1.181's Bun 1.4 upgrade reshuffled the minified names while leaving the parser logic identical (§7). The changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
+- **Official builds through 2.1.183 have not fixed it.** A 178↔179 binary diff shows the parser byte unchanged; 2.1.181's Bun 1.4 upgrade reshuffled the minified names while leaving the parser logic identical; and 2.1.183 is byte-for-byte identical to 2.1.181 at the parser site once identifiers are normalized (§7). The changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
 - **Honest boundary:** the patch covers one corner of a larger bug cluster. A second camp attributes other failures in the same cluster to the model emitting malformed markup, which a client patch cannot touch. We could not reproduce one of @in4mer's four points on 2.1.179. And the parser's primary failure path is, by construction, not reachable from a server-side mock, so the unit test rather than an end-to-end test is what verifies the fix.
 
 ## 1. The symptom: a tool call with no arguments
@@ -100,6 +100,8 @@ Time anchor again: this is 2.1.179 on 2026-06-17. Re-run the two diffs on any la
 
 **Update, 2.1.181 (2026-06-18).** I re-ran both diffs on the next build (2.1.180 was skipped). The verdict holds — the parser is still unpatched — and the *way* it held is the point. A literal search for the old `,!Y)q.push` now finds nothing, yet the parser logic is structurally identical; only the names changed. The cause is in the changelog: the bundled Bun runtime was upgraded to 1.4, and the new bundler reshuffled the entire minified identifier space. The string handler's variables went from `Y/q/$` (2.1.179) to `l/n/a` (2.1.181), and the factory binary dropped from 226,082,208 to 215,193,056 bytes (~11 MB) — a new minifier, not a parser change. This is the section's thesis made concrete: a fixed byte-pattern rots across builds, so the durable anchor is the *structure* — `,!<flag>)<recv>.push({type:"string",value:<acc>})` — not the literal bytes. The same two-byte fix still applies; only the way you locate it must be version-agnostic.
 
+**Update, 2.1.183 (2026-06-19).** Two builds on (2.1.182 was skipped), the verdict still holds — and this time the easy way. With Bun already at 1.4 since 2.1.181, the minifier reshuffled nothing: the string handler's variables are still `l/n/a`, and once identifiers are normalized the parser site is byte-for-byte identical to 2.1.181 — the same `,!l)n.push({type:"string",value:a})`. None of 2.1.183's sixteen changelog entries touch tool-call parsing (the nearest, "re-prompt once when a turn returns only a thinking block," is about *no output*, not *evaporated arguments* — a different failure). The structural anchor matched `!l`→`!0` on the first try, no script change. Across three consecutive builds — 2.1.179, 181, 183 — the parser is unpatched upstream.
+
 ## 8. Honest scope: one corner of the cluster
 
 evap-shield's patch covers Camp A's sub-shape. It is not the whole cluster. The community splits tool-call parsing failures into several sub-patterns, and Camp B's malformed-markup route is a different one. That is exactly why, in our own harness, the patched binary still produced `{}` on a clean truncation: that path hits the secondary fallback, not the primary parser drop (Section 6). The fix is real. It is one corner.
@@ -112,7 +114,7 @@ One sentence in Section 6 is worth returning to: the unreachable end-to-end test
 
 If the primary path fires only in a live TUI session, and no controlled harness can reach it, then the only place the patch's primary-path efficacy can ever be observed is a real session on a real machine. Ours, or yours. The unit test proves the byte-level behaviour is correct (Section 4); it cannot prove the fix lands on the path that bit you in production, because that path does not exist inside the test. So "a structural boundary of the harness" is the honest engineering description, and it is at the same time a transfer: the end-to-end verification we could not run does not disappear, it moves downstream to whoever runs the patched binary. Each person who patches is, on the primary path, the first-line observer of an outcome we never got to watch.
 
-I'd rather name that than leave it in neutral terms. It is not a confession either: the byte-level change is verified at the unit layer (Section 4), the patch is fully reversible with a backup and safety checks (Section 5), and upstream has shipped no fix through 2.1.181 (Section 7). The observer is informed and the risk is reversible. But informed is the precise word, not proven. If you patch, you are not consuming an efficacy demonstrated end to end; on the primary path, you are where that proof finally happens.
+I'd rather name that than leave it in neutral terms. It is not a confession either: the byte-level change is verified at the unit layer (Section 4), the patch is fully reversible with a backup and safety checks (Section 5), and upstream has shipped no fix through 2.1.183 (Section 7). The observer is informed and the risk is reversible. But informed is the precise word, not proven. If you patch, you are not consuming an efficacy demonstrated end to end; on the primary path, you are where that proof finally happens.
 
 ## References
 

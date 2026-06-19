@@ -3,7 +3,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-4.0+-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.x-7C3AED.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Tested](https://img.shields.io/badge/tested-2.1.181-brightgreen.svg)](CHANGELOG.md)
+[![Tested](https://img.shields.io/badge/tested-2.1.183-brightgreen.svg)](CHANGELOG.md)
 
 [中文](README_ZH.md)
 
