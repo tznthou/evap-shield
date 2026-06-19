@@ -116,6 +116,18 @@ set_binary "2.1.192" "$FIX_BODY"
 OUT=$(run --force)
 echo "$OUT" | grep -q "patch is in place" && ok "--force prints patched confirmation" || bad "--force prints patched (got: $OUT)"
 
+# ── 8b. First run is a discovery, not an update: no bogus "updated ? ->" ──
+clear_seen
+set_binary "2.1.200" "$FIX_BODY"
+OUT=$(run --force)
+echo "$OUT" | grep -q "Claude Code 2.1.200" && ok "first-run: bare version, no arrow" || bad "first-run bare version (got: $OUT)"
+if echo "$OUT" | grep -q "updated"; then bad "first-run must not say 'updated' (got: $OUT)"; else ok "first-run: no spurious 'updated'"; fi
+# First run + unknown is the user-visible case (warn -> systemMessage): no '?'
+clear_seen
+set_binary "2.1.201" "no vh1 pattern"
+SYS=$(run --json | jq -r '.hookSpecificOutput.systemMessage // ""' 2>/dev/null)
+if echo "$SYS" | grep -q '?'; then bad "first-run unknown systemMessage has stray '?' (got: $SYS)"; else ok "first-run unknown: no stray '?' in systemMessage"; fi
+
 # ── 9. fail-open: no binary at all -> exit 0, no output ──
 rm -f "$HOME_DIR/.local/bin/claude"
 OUT=$(run; echo "rc=$?")

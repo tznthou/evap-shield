@@ -148,26 +148,33 @@ FIRST_RUN=false
 [[ -z "$PREV_FP" ]] && FIRST_RUN=true
 
 # ── Compose the verdict (only vulnerable/unknown warrant user action) ──
+# "What changed" prefix: a first run is a discovery, not an update, so it
+# states the bare version instead of a bogus "updated ? -> X".
+if [[ "$FIRST_RUN" == true ]]; then
+  CHANGE="evap-shield: Claude Code $VERSION"
+else
+  CHANGE="evap-shield: Claude Code updated ${PREV_VERSION:-?} -> $VERSION"
+fi
 HEADLINE=""; DETAIL=""; ACTION=""; SEVERITY="info"
 case "$STATUS" in
   vulnerable)
     SEVERITY="warn"
     if [[ "$FIRST_RUN" == true ]]; then
-      HEADLINE="evap-shield: Claude Code $VERSION is NOT patched against the VH1 bug."
+      HEADLINE="$CHANGE is NOT patched against the VH1 bug."
     else
-      HEADLINE="evap-shield: Claude Code updated ${PREV_VERSION:-?} -> $VERSION — the VH1 patch was overwritten."
+      HEADLINE="$CHANGE — the VH1 patch was overwritten."
     fi
     DETAIL="Tool arguments can silently collapse to {} again until re-patched."
     ACTION="Re-apply:  bash patch-vh1.sh"
     ;;
   patched)
     SEVERITY="info"
-    HEADLINE="evap-shield: Claude Code updated ${PREV_VERSION:-?} -> $VERSION — VH1 patch is in place."
+    HEADLINE="$CHANGE — VH1 patch is in place."
     DETAIL="No action needed."
     ;;
   unknown)
     SEVERITY="warn"
-    HEADLINE="evap-shield: Claude Code updated ${PREV_VERSION:-?} -> $VERSION — VH1 parser pattern not found."
+    HEADLINE="$CHANGE — VH1 parser pattern not found."
     DETAIL="The parser may have been restructured upstream (possibly fixed), or the patcher no longer matches."
     ACTION="Verify:  bash patch-vh1.sh --status"
     ;;
