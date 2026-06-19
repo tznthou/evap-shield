@@ -14,8 +14,13 @@
 
 ## 2026-06-19
 
+### Added
+
+- **SessionStart 更新偵測 hook**（`check-update.sh`）：每次 session start 對 binary 做指紋比對（只 stat 的 fast path，沒變化時靜默），當 Claude Code 更新了——更新會覆蓋 binary patch——就回報 VH1 patch 是否需要重套（`vulnerable` → 重跑 patcher；`unknown` → 可能官方修了，請確認；`patched`／無變化 → 安靜）。只偵測與回報：絕不 patch、也不改任何檔案。獨立單檔、fail-open，附 `test-check-update.sh` 測試（21 tests）。
+
 ### Changed
 
+- `install.sh` 現在會安裝兩個 hook（PreToolUse + SessionStart），用同樣冪等、非破壞的 settings 合併；installer 測試套件擴充到 26 tests。
 - tested badge 更新到 **2.1.183**。Claude Code 從 2.1.181 → 2.1.183 後（2.1.182 跳號），三路 binary diff 確認官方 parser 在 identifier normalize 後與 2.1.181 逐字相同——這次 minifier 連變數名都沒洗牌（仍是 `l/n/a`）——VH1 官方仍未修。2.1.183 的 16 條 changelog 無一碰 tool-call 解析。version-agnostic patcher 零腳本改動直接重套（`!l`→`!0`，1 byte）。
 
 ## 2026-06-18

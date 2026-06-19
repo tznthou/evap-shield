@@ -14,8 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## 2026-06-19
 
+### Added
+
+- **SessionStart update-detection hook** (`check-update.sh`): fingerprints the live binary on each session start (stat-only fast path, silent when unchanged) and, when Claude Code was updated — which overwrites the binary patch — reports whether the VH1 patch needs re-applying (`vulnerable` → re-run the patcher; `unknown` → possibly fixed upstream, verify; `patched`/unchanged → quiet). Detection and reporting only: it never patches and never edits files. Standalone single file, fail-open, covered by `test-check-update.sh` (21 tests).
+
 ### Changed
 
+- `install.sh` now installs both hooks (PreToolUse + SessionStart) with the same idempotent, non-destructive settings merge; the installer suite expanded to 26 tests.
 - Bumped the tested badge to **2.1.183**. After Claude Code updated 2.1.181 → 2.1.183 (2.1.182 was skipped), a three-way binary diff confirms the upstream parser is byte-for-byte identical to 2.1.181 once identifiers are normalized — this time the minifier didn't even reshuffle names (still `l/n/a`) — so VH1 remains unpatched upstream. None of 2.1.183's sixteen changelog entries touch tool-call parsing. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte).
 
 ## 2026-06-18
