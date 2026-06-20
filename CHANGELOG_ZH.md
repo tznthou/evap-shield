@@ -11,6 +11,7 @@
 ### Changed
 
 - README（中英）：補上 version-agnostic patcher 的說明——1-byte 結構式 patch（先前誤寫為 2-byte 字面）、45 個 patcher 測試，以及 2.1.181 的 Bun 1.4 註記。
+- `docs/vh1-investigation.md`：標注 MCP tool 的 hook 覆蓋依賴 validation *時序*、只在 2.1.179 驗過——不像 parser site 有 re-check 到 181/183；並補上這個 re-check 現已由 `SessionStart` hook 自動化（只 stat 的 fingerprint fast path 當閘門，變了才跑 anchored scan）。
 
 ## 2026-06-19
 

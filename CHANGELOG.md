@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - README (EN/ZH): documented the version-agnostic patcher — the 1-byte structural patch (previously described as a 2-byte literal), the 45-test patcher suite, and the 2.1.181 Bun 1.4 note.
+- `docs/vh1-investigation.md`: flagged that the MCP-tool hook coverage rests on validation *ordering* and was verified only on 2.1.179 — not re-checked on 181/183 like the parser site; and documented that this re-check is now automated by the `SessionStart` hook (a stat-only fingerprint fast path gates the anchored scan).
 
 ## 2026-06-19
 
