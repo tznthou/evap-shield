@@ -6,11 +6,16 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
-## [Unreleased]
+## 2026-06-22
 
 ### Changed
 
-- README（中英）：補上 version-agnostic patcher 的說明——1-byte 結構式 patch（先前誤寫為 2-byte 字面）、45 個 patcher 測試，以及 2.1.181 的 Bun 1.4 註記。
+- tested badge 更新到 **2.1.185**。Claude Code 從 2.1.183 → 2.1.185 後（2.1.184 跳號，如同先前的 2.1.182），兩路 binary diff 確認官方仍未修 VH1：parser site 與 2.1.183 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，變數名沒洗牌（沿用 Bun 1.4）——但在檔案裡漂移了 64 bytes（192250754 → 192250818），證明這是貨真價實的新 build（parser site 凍結不動，而非省去重編譯的複製）。原廠 size 不變（215952608），2.1.185 新增的字串全屬 sandbox／agent-proxy／cloud-sessions／oauth／MCP 治理，無一碰 JSON parser。這是 2.1.181 以來官方第 **2** 個有效改版（繼 2.1.183 後）仍未修 VH1。version-agnostic patcher 零腳本改動直接重套（`!l`→`!0`，1 byte；原廠 `a280c23b…` → patched `69862459…`），並在磁碟、記錄 state、以及 running session mmap 的 binary 三處重新驗證。
+
+## 2026-06-20
+
+### Changed
+
 - `docs/vh1-investigation.md`：標注 MCP tool 的 hook 覆蓋依賴 validation *時序*、只在 2.1.179 驗過——不像 parser site 有 re-check 到 181/183；並補上這個 re-check 現已由 `SessionStart` hook 自動化（只 stat 的 fingerprint fast path 當閘門，變了才跑 anchored scan）。
 
 ## 2026-06-19
@@ -33,6 +38,7 @@
 ### Changed
 
 - VH1 patcher 改為 **version-agnostic**：以錨定 parser 不變量的結構錨點，取代寫死的 minified 變數 pattern，因此能在跨版本的 bundler/minifier 洗牌後存活——已在 2.1.181 的 Bun 1.4 變數改名驗證。
+- README（中英）：補上 version-agnostic patcher 的說明——1-byte 結構式 patch（先前誤寫為 2-byte 字面）、45 個 patcher 測試，以及 2.1.181 的 Bun 1.4 註記。
 
 ## 2026-06-17
 

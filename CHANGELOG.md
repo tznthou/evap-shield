@@ -6,11 +6,16 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
-## [Unreleased]
+## 2026-06-22
 
 ### Changed
 
-- README (EN/ZH): documented the version-agnostic patcher — the 1-byte structural patch (previously described as a 2-byte literal), the 45-test patcher suite, and the 2.1.181 Bun 1.4 note.
+- Bumped the tested badge to **2.1.185**. After Claude Code updated 2.1.183 → 2.1.185 (2.1.184 was skipped, as 2.1.182 was before it), a two-way binary diff confirms VH1 remains unpatched upstream: the parser site is byte-for-byte identical to 2.1.183 — still `,!l)n.push({type:"string",value:a})`, names unshuffled (Bun 1.4 carried over) — though it has drifted 64 bytes within the file (192250754 → 192250818), confirming a genuinely new build with the parser site frozen rather than a recompile-free copy. Original size is unchanged (215952608) and 2.1.185's new strings are all sandbox / agent-proxy / cloud-sessions / oauth / MCP governance, none touching the JSON parser. This is the **second** effective upstream release since 2.1.181 (after 2.1.183) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `a280c23b…` → patched `69862459…`), re-verified on disk, in the recorded state, and against the running session's mmap'd binary.
+
+## 2026-06-20
+
+### Changed
+
 - `docs/vh1-investigation.md`: flagged that the MCP-tool hook coverage rests on validation *ordering* and was verified only on 2.1.179 — not re-checked on 181/183 like the parser site; and documented that this re-check is now automated by the `SessionStart` hook (a stat-only fingerprint fast path gates the anchored scan).
 
 ## 2026-06-19
@@ -33,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - The VH1 patcher is now **version-agnostic**: a structural anchor on the parser's invariant replaces the hardcoded minified variable pattern, so it survives bundler/minifier reshuffles across Claude Code versions — verified across the 2.1.181 Bun 1.4 identifier rename.
+- README (EN/ZH): documented the version-agnostic patcher — the 1-byte structural patch (previously described as a 2-byte literal), the 45-test patcher suite, and the 2.1.181 Bun 1.4 note.
 
 ## 2026-06-17
 
