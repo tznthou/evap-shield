@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-06-23
+
+### Changed
+
+- Bumped the tested badge to **2.1.186**. Claude Code updated 2.1.185 → 2.1.186 (consecutive this time — no skipped version, unlike 2.1.182/2.1.184). A two-way binary diff confirms VH1 remains unpatched upstream: the ~280-byte window around the parser site is byte-for-byte identical to 2.1.185 — still `,!l)n.push({type:"string",value:a})`, names unshuffled — and the structural anchor still finds exactly one vulnerable site in the whole binary. Unlike the frozen-size 2.1.183→2.1.185 reissues, 2.1.186 is a *substantial* new build: original size grew 215952608 → 216811232 (+858,624 bytes) and the site drifted 192250818 → 193217884 (+967,066). A strings diff attributes the growth to sandbox / egress agent-proxy / managed-agents (subagent) / MCP resource tools / plugin governance — none of it touching the JSON parser. This is the **third** effective upstream release since 2.1.181 (after 2.1.183 and 2.1.185) to leave VH1 unfixed, and the strongest signal yet: upstream shipped ~858 KB of real new code and still didn't touch the parser. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `463a79cc…` → patched `8b277719…`), verified on disk (bug 0 / fix 1) and at launch (2.1.186).
+
 ## 2026-06-22
 
 ### Changed

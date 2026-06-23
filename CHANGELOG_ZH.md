@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-06-23
+
+### Changed
+
+- tested badge 更新到 **2.1.186**。Claude Code 從 2.1.185 → 2.1.186（這次連續版號，沒跳號，不像 2.1.182／2.1.184）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後約 280 bytes 的窗口與 2.1.185 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，變數名沒洗牌——結構錨點掃整個 binary 也只有 1 個 vulnerable site。但不同於 2.1.183→2.1.185 那種 size 凍結的改版，2.1.186 是*實質*大 build：原廠 size 從 215952608 → 216811232（**+858,624 bytes**），site 大幅漂移 192250818 → 193217884（**+967,066**）。strings diff 顯示這次成長來自 sandbox／egress agent-proxy／managed-agents（subagent）／MCP resource tools／plugin governance——無一碰 JSON parser。這是 2.1.181 以來官方第 **3** 個有效改版（繼 2.1.183、2.1.185 後）仍未修 VH1，也是迄今最強的訊號：官方塞了約 858 KB 的實質新 code，卻依然沒碰 parser。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `463a79cc…` → patched `8b277719…`），並在磁碟（bug 0／fix 1）與啟動（2.1.186）驗證。
+
 ## 2026-06-22
 
 ### Changed
