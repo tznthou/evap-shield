@@ -1,7 +1,8 @@
 # VH1 Streaming Parser Bug — 修復方案評估
 
+> **決策史快照 · 凍結於 2026-06-16。** 本文件記錄選定 binary patch 路線當時的方案評估（A–F）與決策依據，內容停在 2026-06-16。對外技術論述與逐版判決（至 2.1.187，官方仍未修）見 [docs/vh1-investigation.md](docs/vh1-investigation.md)，逐版進展見 [CHANGELOG_ZH.md](CHANGELOG_ZH.md)。
 > 最後更新：2026-06-16
-> 狀態：觀望中，Opus 4.6[1m] 規避。目標回 4.8 時啟動修復。
+> 狀態（當時）：觀望中，Opus 4.6[1m] 規避。目標回 4.8 時啟動修復。
 
 ## 根因摘要
 

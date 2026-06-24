@@ -2,15 +2,15 @@
 
 *A field report on root-causing, patching, and verifying the bug where tool calls silently lose their arguments, with an honest account of what the fix does and does not cover.*
 
-*Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on 2.1.181 and 2.1.183 (§7). The methods below let you re-check any later build yourself.*
+*Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on every build through 2.1.187 (§7). The methods below let you re-check any later build yourself.*
 
 ## TL;DR
 
-- **The bug is real and unfixed upstream.** Tool calls intermittently arrive with their arguments collapsed to `{}`. Three open issues track it (#62123, #67765, #63583); none had a maintainer reply as of 2026-06-17.
+- **The bug is real and unfixed upstream.** Tool calls intermittently arrive with their arguments collapsed to `{}`. Three open issues track it (#62123, #67765, #63583); none had a maintainer reply as of 2026-06-24.
 - **Root cause (one sub-shape of it):** a client-side streaming partial-JSON parser drops a string token when a value is cut across a streaming chunk boundary, collapsing the tool input to `{}`. We reached this independently; @in4mer filed the same analysis first in #67765.
 - **It is patchable on the client.** Because this sub-shape lives in the client parser, a single two-byte binary patch (`!Y`→`!0`) stops the token from being discarded. As far as we found, evap-shield is the only tool that patches the parser itself rather than cleaning up after the fact.
 - **The patch is verified correct by a white-box unit test: 760 truncation cases, 0 regressions.** It compares the original and patched parser byte-for-byte at every streaming cut point.
-- **Official builds through 2.1.183 have not fixed it.** A 178↔179 binary diff shows the parser byte unchanged; 2.1.181's Bun 1.4 upgrade reshuffled the minified names while leaving the parser logic identical; and 2.1.183 is byte-for-byte identical to 2.1.181 at the parser site once identifiers are normalized (§7). The changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
+- **Official builds through 2.1.187 have not fixed it.** A 178↔179 binary diff shows the parser byte unchanged; 2.1.181's Bun 1.4 upgrade reshuffled the minified names while leaving the parser logic identical; and every build since — 2.1.183, 185, 186, 187 — is byte-for-byte identical at the parser site once identifiers are normalized (§7). The changelog's "partial responses preserved" is a higher-layer graceful-degradation feature, not a parser fix.
 - **Honest boundary:** the patch covers one corner of a larger bug cluster. A second camp attributes other failures in the same cluster to the model emitting malformed markup, which a client patch cannot touch. We could not reproduce one of @in4mer's four points on 2.1.179. And the parser's primary failure path is, by construction, not reachable from a server-side mock, so the unit test rather than an end-to-end test is what verifies the fix.
 
 ## 1. The symptom: a tool call with no arguments
@@ -29,7 +29,7 @@ The bug this report is about looks like this: a model decides to call a tool, th
 - the tool_use block disappears entirely: `stop_reason` is `tool_use` but no block follows. This matches the title of #63583 verbatim.
 - a silent stall: empty text, with `stop_reason` not set to `tool_use`.
 
-It is real and not rare: #62123 has 54 comments, and both #67765 and #63583 carry a `has repro` label. I won't claim a frequency beyond that. There is no hard data for one, and the bug is intermittent by nature.
+It is real and not rare: #62123 has 57 comments, and both #67765 and #63583 carry a `has repro` label. I won't claim a frequency beyond that. There is no hard data for one, and the bug is intermittent by nature.
 
 ## 2. Two camps, no upstream fix, and nobody patching it
 
@@ -102,6 +102,12 @@ Time anchor again: this is 2.1.179 on 2026-06-17. Re-run the two diffs on any la
 
 **Update, 2.1.183 (2026-06-19).** Two builds on (2.1.182 was skipped), the verdict still holds — and this time the easy way. With Bun already at 1.4 since 2.1.181, the minifier reshuffled nothing: the string handler's variables are still `l/n/a`, and once identifiers are normalized the parser site is byte-for-byte identical to 2.1.181 — the same `,!l)n.push({type:"string",value:a})`. None of 2.1.183's sixteen changelog entries touch tool-call parsing (the nearest, "re-prompt once when a turn returns only a thinking block," is about *no output*, not *evaporated arguments* — a different failure). The structural anchor matched `!l`→`!0` on the first try, no script change. Across three consecutive builds — 2.1.179, 181, 183 — the parser is unpatched upstream.
 
+**Update, 2.1.185 (2026-06-22).** (2.1.184 skipped.) Same verdict, same `,!l)n.push({type:"string",value:a})` with identifiers unchanged — but the parser site has drifted 64 bytes down the file (192,250,754 → 192,250,818), so this is a genuinely new build with the parser frozen in place, not a recompiled copy. The 78 new short strings are all sandboxing, an agent-proxy, cloud sessions, OAuth and MCP governance; none touch the JSON parser.
+
+**Update, 2.1.186 (2026-06-23).** The first back-to-back version number (185→186, breaking the 182/184 skip pattern), and the strongest signal so far. Unlike the frozen-size rebuilds before it, 186 is a substantial build: the factory binary grew 858,624 bytes and the parser site moved almost a megabyte (to 193,217,884). That new code is all sandboxing, an egress agent-proxy, managed-agents, MCP resource tools, plugin governance — even a prompt for a "security monitor for autonomous AI coding agents." Anthropic shipped ~858 KB of real new code and still did not touch the parser. The same day, a third party independently filed #70196 (takepan, 2.1.186, macOS/iTerm) with the textbook symptom — "could not be parsed (retry also failed)," the error array itself evaporated to `[]` — confirming 186 is still affected from the outside. It was later marked `duplicate` of the main thread and tagged `area:model`, the same triage split noted in Section 2.
+
+**Update, 2.1.187 (2026-06-24).** The second back-to-back number (186→187). This time the factory binary shrank 817,184 bytes, yet the ±260-byte window around the parser site matches raw — byte-for-byte, without even normalizing identifiers. The build is real, not a reshuffle: 39 strings added and 26 removed — a `/toggle-memory`→`/pause-memory` rename, usage-credit billing copy, sandbox and credential fields, GitHub Actions, an MCP idle timeout — none in the parser. That makes four effective builds since 2.1.181 (183, 185, 186, 187), none of them a fix, across two weeks of near-daily releases.
+
 **Automating the re-check.** We have since wired this into a `SessionStart` hook (`check-update.sh`) so it runs on its own, because Section 5's cost recurs on every update: each native `claude update` overwrites the patch, raising "did this build fix it, and must I re-patch?" anew. It stays near-instant by not diffing on every launch — a stat-only fingerprint (resolved path, size, mtime) of the live binary gates the work; an unchanged fingerprint means no update happened, so nothing could have been overwritten, and it exits silently. Only a changed binary triggers the full anchored scan from this section, which reports `vulnerable` (re-patch), `patched` (quiet), or `unknown` (pattern gone — possibly fixed upstream, verify). It fails open throughout.
 
 ## 8. Honest scope: one corner of the cluster
@@ -116,7 +122,7 @@ One sentence in Section 6 is worth returning to: the unreachable end-to-end test
 
 If the primary path fires only in a live TUI session, and no controlled harness can reach it, then the only place the patch's primary-path efficacy can ever be observed is a real session on a real machine. Ours, or yours. The unit test proves the byte-level behaviour is correct (Section 4); it cannot prove the fix lands on the path that bit you in production, because that path does not exist inside the test. So "a structural boundary of the harness" is the honest engineering description, and it is at the same time a transfer: the end-to-end verification we could not run does not disappear, it moves downstream to whoever runs the patched binary. Each person who patches is, on the primary path, the first-line observer of an outcome we never got to watch.
 
-I'd rather name that than leave it in neutral terms. It is not a confession either: the byte-level change is verified at the unit layer (Section 4), the patch is fully reversible with a backup and safety checks (Section 5), and upstream has shipped no fix through 2.1.183 (Section 7). The observer is informed and the risk is reversible. But informed is the precise word, not proven. If you patch, you are not consuming an efficacy demonstrated end to end; on the primary path, you are where that proof finally happens.
+I'd rather name that than leave it in neutral terms. It is not a confession either: the byte-level change is verified at the unit layer (Section 4), the patch is fully reversible with a backup and safety checks (Section 5), and upstream has shipped no fix through 2.1.187 (Section 7). The observer is informed and the risk is reversible. But informed is the precise word, not proven. If you patch, you are not consuming an efficacy demonstrated end to end; on the primary path, you are where that proof finally happens.
 
 ## References
 

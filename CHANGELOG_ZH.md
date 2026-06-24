@@ -11,6 +11,7 @@
 ### Changed
 
 - tested badge 更新到 **2.1.187**。Claude Code 從 2.1.186 → 2.1.187（又是連續版號——繼 2.1.185→2.1.186 後第二次背靠背連號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±260 bytes 的窗口與 2.1.186 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，變數名沒洗牌，連 normalize 都不必就一字不差——結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0）。但與 +858 KB 的 2.1.186 大 build 相反，2.1.187 反而*縮小*：原廠 size 從 216811232 → 215994048（**−817,184 bytes**），site 仍漂移 193217884 → 193618676（**+400,792**），證明是貨真價實的新 build 而非省去重編譯的複製。strings diff 顯示 2.1.187 是實質 build（非凍結冷飯），但新增 39／移除 26 條人類可讀訊息全落在別處：`/toggle-memory` 改名為 `/pause-memory`、Fable 5 計費文案常態化（拿掉「for a limited time」／「Included in your plan limits」）、sandbox／credential 保護欄位、GitHub Actions 設定、MCP idle timeout——無一碰 JSON parser。這是 2.1.181 以來官方第 **4** 個有效改版（繼 2.1.183、2.1.185、2.1.186 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `a59a16ba…` → patched `df0eb868…`），並在磁碟（bug 0／fix 1）、簽章、以及 running session mmap 的 patched binary 三處驗證。
+- 發表前對外文件對齊。修掉兩份 README 裡 clone URL 的 `{owner}` placeholder（→ `tznthou`，原本會讓使用者複製即失敗）。更新 #62123 數據（54 → 57 留言；依 issue 留言者 association 重新查證，57 則全為非官方帳號，截至 2026-06-24 仍零官方回覆）。investigation §7 版本判決鏈補到 2.1.185–187，並納入外部 #70196 真實活例（takepan，2.1.186，後被官方標 `duplicate`／`area:model`）。FIX-PLAN.md 標為凍結於 2026-06-16 的決策史快照，當前論述導向 investigation。並修正兩份 README 的 check-update 測試數（18 → 21）。
 
 ## 2026-06-23
 

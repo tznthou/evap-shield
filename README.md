@@ -42,7 +42,7 @@ Claude Code's streaming JSON parser has a flaw in its string tokenizer (function
 
 Your AI can think. It just can't act. And it doesn't know why.
 
-Tracked in [#62123](https://github.com/anthropics/claude-code/issues/62123) (54+ comments, zero staff response as of 2026-06-16) and root-caused in [#67765](https://github.com/anthropics/claude-code/issues/67765).
+Tracked in [#62123](https://github.com/anthropics/claude-code/issues/62123) (57 comments, zero staff response as of 2026-06-24) and root-caused in [#67765](https://github.com/anthropics/claude-code/issues/67765).
 
 **Affected**: Opus 4.7, Opus 4.8, Sonnet 4.5. **Not affected**: Opus 4.6, Sonnet 4.6.
 
@@ -75,7 +75,7 @@ The patch is the root fix — it stops `{}` from forming at all. The hook is the
 | `bash test-evap-shield.sh` | Run the hook test suite (25 tests) |
 | `bash test-patch-vh1.sh` | Run the patcher failure-path suite (45 tests) |
 | `bash test-install.sh` | Run the installer merge-safety suite (26 tests) |
-| `bash test-check-update.sh` | Run the update-detector suite (18 tests) |
+| `bash test-check-update.sh` | Run the update-detector suite (21 tests) |
 
 ---
 
@@ -91,7 +91,7 @@ The patch is the root fix — it stops `{}` from forming at all. The hook is the
 ### Install the hook
 
 ```bash
-git clone https://github.com/{owner}/evap-shield.git
+git clone https://github.com/tznthou/evap-shield.git
 cd evap-shield
 bash install.sh
 ```
@@ -187,7 +187,7 @@ evap-shield/
   test-evap-shield.sh   # Hook test suite (25 tests)
   test-patch-vh1.sh     # Patcher failure-path tests (45 tests)
   test-install.sh       # Installer merge-safety tests (26 tests)
-  test-check-update.sh  # Update-detector tests (18 tests)
+  test-check-update.sh  # Update-detector tests (21 tests)
   FIX-PLAN.md           # Full technical analysis and rollback criteria
   README.md             # English
   README_ZH.md          # Chinese
@@ -219,7 +219,7 @@ On May 23, 2026, Claude Code started freezing. Not crashing — freezing. The mo
 
 Three days of investigation traced it to a single boolean in a minified JavaScript tokenizer: `Y=!0` sets a flag when a JSON string is split mid-stream, and `!Y` silently skips pushing that token. One dropped string cascades into `{}` arguments, which get cached per-tool, poisoning the entire session.
 
-The issue has 54+ comments and zero official response. The only clean escape was downgrading to Opus 4.6.
+The issue has 57 comments and zero official response. The only clean escape was downgrading to Opus 4.6.
 
 We built evap-shield because waiting wasn't an option.
 
