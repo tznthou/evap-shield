@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-06-24
+
+### Changed
+
+- Bumped the tested badge to **2.1.187**. Claude Code updated 2.1.186 → 2.1.187 (consecutive again — the second back-to-back bump after 2.1.185→2.1.186). A two-way binary diff confirms VH1 remains unpatched upstream: the ±260-byte window around the parser site is byte-for-byte identical to 2.1.186 — still `,!l)n.push({type:"string",value:a})`, names unshuffled, identical without even needing normalization — and the structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0). Unlike the +858 KB 2.1.186 build, 2.1.187 *shrank*: original size 216811232 → 215994048 (−817,184 bytes), while the site still drifted 193217884 → 193618676 (+400,792), confirming a genuinely new build rather than a recompile-free copy. A strings diff shows 2.1.187 is a real build (not a frozen reissue), but its 39 added / 26 removed human-readable messages all land elsewhere: `/toggle-memory` renamed to `/pause-memory`, Fable 5 usage-credit copy normalized (dropping "for a limited time" / "Included in your plan limits"), sandbox/credential-protection fields, GitHub Actions setup, and MCP idle-timeout — none of it touching the JSON parser. This is the **fourth** effective upstream release since 2.1.181 (after 2.1.183, 2.1.185, and 2.1.186) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `a59a16ba…` → patched `df0eb868…`), verified on disk (bug 0 / fix 1), by signature, and against the running session's mmap'd patched binary.
+
 ## 2026-06-23
 
 ### Changed
