@@ -6,6 +6,18 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-06-26
+
+### Changed
+
+- Bumped the tested badge to **2.1.193**, catching up from 2.1.187 — the 2.1.191 re-check below (2026-06-25) was recorded in the investigation ledger but the public badge wasn't bumped at the time, so this entry covers both 2.1.191 and 2.1.193. Claude Code updated 2.1.191 → 2.1.193 (2.1.192 skipped). A two-way binary diff confirms VH1 remains unpatched upstream: the ±120-byte window around the parser site is byte-for-byte identical to 2.1.191 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, continuing the raw-frozen streak since 2.1.187 — and the structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0). The factory binary grew another 2.39 MB (219,856,224 → 222,248,240) and the site drifted 989,822 bytes (197,303,261 → 198,293,083), confirming a genuinely new build. A strings diff puts all 3,701 new short strings elsewhere — Bun runtime stream builtins (`@putByIdDirectPrivate(readableStreamController…)`, an HTTP "Parse Error" path), a workflow-VM sandbox (`attacker-reachable` clone walker), and a feedback-report UI template — none touching the character-level string tokenizer. This is the **seventh** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `f7513a30…` → patched `cadbe992…`), verified on disk (bug 0 / fix 1), by signature, by the running session's mmap'd inode (this very session — patched dogfooding), and by launch timing.
+
+## 2026-06-25
+
+### Changed
+
+- Re-checked 2.1.190 and 2.1.191. After 2.1.187, Claude Code shipped 2.1.190 (2026-06-24; 188/189 skipped) and 2.1.191. Both are genuinely new builds (factory size 215,994,048 → 217,273,568 → 219,856,224; parser site drifted to 197,303,261 in 191) and both leave the site frozen at `,!l)n.push({type:"string",value:a})`, raw-identical to 2.1.187. A strings diff attributes the growth to a Bun runtime upgrade (HTTP agent/proxy/tunnel, async_hooks) and the workflow/agent subsystem; 2.1.191's eighteen changelog entries (/rewind, background agents, sandboxing, MCP retry, a 37% CPU cut) touch none of the tool-call parser. 2.1.190 was a brief ~8-hour unpatched window — never patched before 191 superseded it — and 191 was re-patched and verified by byte, inode, and launch timing. These are the **fifth** and **sixth** effective upstream releases since 2.1.181 to leave VH1 unfixed. (The public badge bump for these was folded into the 2026-06-26 entry.)
+
 ## 2026-06-24
 
 ### Changed

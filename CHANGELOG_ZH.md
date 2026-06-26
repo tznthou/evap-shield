@@ -6,6 +6,18 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-06-26
+
+### Changed
+
+- tested badge 更新到 **2.1.193**，從 2.1.187 一次補齊——下方 2.1.191 的 re-check（2026-06-25）已記入 investigation 判決鏈，但當時公開 badge 未同步 bump，故本條同時涵蓋 2.1.191 與 2.1.193。Claude Code 從 2.1.191 → 2.1.193（2.1.192 跳號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±120 bytes 的窗口與 2.1.191 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必，延續 2.1.187 以來的 raw 凍結——結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0）。原廠 binary 再長 2.39 MB（219,856,224 → 222,248,240），site 漂移 989,822 bytes（197,303,261 → 198,293,083），證明是貨真價實的新 build。strings diff 顯示 3,701 條新增短字串全落在別處——Bun runtime stream builtin（`@putByIdDirectPrivate(readableStreamController…)`、HTTP「Parse Error」路徑）、workflow-VM sandbox（`attacker-reachable` clone walker）、feedback 回報 UI template——無一碰字元級 string tokenizer。這是 2.1.181 以來官方第 **7** 個有效改版（繼 2.1.183、185、186、187、190、191 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `f7513a30…` → patched `cadbe992…`），並在磁碟（bug 0／fix 1）、簽章、running session mmap inode（即本 session——patched dogfooding）、啟動時序四處驗證。
+
+## 2026-06-25
+
+### Changed
+
+- re-check 2.1.190 與 2.1.191。2.1.187 之後，Claude Code 釋出 2.1.190（2026-06-24；188／189 跳號）與 2.1.191。兩者都是貨真價實的新 build（原廠 size 215,994,048 → 217,273,568 → 219,856,224；parser site 在 191 漂移到 197,303,261），且都把 site 凍結在 `,!l)n.push({type:"string",value:a})`，與 2.1.187 raw 逐字相同。strings diff 將成長歸因於 Bun runtime 升級（HTTP agent/proxy/tunnel、async_hooks）與 workflow/agent 子系統；2.1.191 的十八條 changelog（/rewind、background agents、sandbox、MCP retry、CPU −37%）無一碰 tool-call parser。2.1.190 是約 8 小時的短暫空窗——在 191 取代它之前從未 patch——191 則重新 patch 並以 byte／inode／啟動時序驗證。這是 2.1.181 以來官方第 **5**、**6** 個有效改版仍未修 VH1。（這兩版的公開 badge bump 併入 2026-06-26 條目。）
+
 ## 2026-06-24
 
 ### Changed
