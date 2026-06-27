@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-06-27
+
+### Changed
+
+- tested badge 更新到 **2.1.195**。Claude Code 從 2.1.193 → 2.1.195（2.1.194 跳號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±120 bytes 的窗口與 2.1.193 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必，這是連續第 3 個 raw 凍結的 build（繼 187→191、191→193 後），延續 2.1.187 以來不間斷的 raw 凍結——連前段的 escape 掃描迴圈（`if(r==="\\"){…l=!0;break}a+=r+e[t]`）都原封未動。結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0）。原廠 binary 長了 2.43 MB（222,248,240 → 224,682,640），site 漂移 3,313,810 bytes（198,293,083 → 201,606,893），證明是貨真價實的新 build、parser 原地凍結。strings diff 顯示新增的 4,746 條（與移除的 2,534 條）短字串全落在別處——LLM gateway/proxy 轉發層（re-emit Anthropic-shaped `text/event-stream`、Bedrock 的 AWS binary event-stream、strip 掉 client 的 `Authorization`）、JWE/JWK/OAuth 憑證層、agent/workflow 子系統、voice streaming、sandbox、Storybook adapter——無一碰字元級 string tokenizer。這是 2.1.181 以來官方第 **8** 個有效改版（繼 2.1.183、185、186、187、190、191、193 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `8b45adad…` → patched `84c24c42…`），並在磁碟（bug 0／fix 1）、簽章、running session mmap inode（即本 session——patched dogfooding）、啟動時序四處驗證。
+
 ## 2026-06-26
 
 ### Changed

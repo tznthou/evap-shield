@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-06-27
+
+### Changed
+
+- Bumped the tested badge to **2.1.195**. Claude Code updated 2.1.193 → 2.1.195 (2.1.194 skipped). A two-way binary diff confirms VH1 remains unpatched upstream: the ±120-byte window around the parser site is byte-for-byte identical to 2.1.193 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, the third raw-frozen build in a row (after 187→191 and 191→193) and unbroken since 2.1.187 — and even the preceding escape-scan loop (`if(r==="\\"){…l=!0;break}a+=r+e[t]`) is untouched. The structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0). The factory binary grew 2.43 MB (222,248,240 → 224,682,640) and the site drifted 3,313,810 bytes (198,293,083 → 201,606,893), confirming a genuinely new build with the parser frozen in place. A strings diff puts all 4,746 added (and 2,534 removed) short strings elsewhere — an LLM gateway/proxy relay layer (re-emitting Anthropic-shaped `text/event-stream`, Bedrock's AWS binary event-stream, stripping the client's `Authorization`), a JWE/JWK/OAuth credential layer, the agent/workflow subsystem, voice streaming, sandboxing, and a Storybook adapter — none touching the character-level string tokenizer. This is the **eighth** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `8b45adad…` → patched `84c24c42…`), verified on disk (bug 0 / fix 1), by signature, by the running session's mmap'd inode (this very session — patched dogfooding), and by launch timing.
+
 ## 2026-06-26
 
 ### Changed
