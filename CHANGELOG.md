@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-06-30
+
+### Changed
+
+- Bumped the tested badge to **2.1.196**. Claude Code updated 2.1.195 → 2.1.196 (consecutive). A two-way binary diff confirms VH1 remains unpatched upstream: the ±120-byte window around the parser site is byte-for-byte identical to 2.1.195 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, the fifth raw-frozen build in a row (after 187→191, 191→193, 193→195, and now 195→196) and unbroken since 2.1.187. The structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0). The factory binary grew 1.1 MB (224,682,640 → 225,782,608) and the site drifted 981,275 bytes (201,606,893 → 202,588,168), confirming a genuinely new build with the parser frozen in place. A strings diff puts all 10,262 added (and 7,616 removed) short strings elsewhere — agent/plugin/MCP/skill/workflow/sandbox/OAuth/Bedrock subsystems — none touching the character-level string tokenizer. This is the **ninth** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193, 195) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `6fc6e61a…` → patched `7fed84d2…`), verified on disk (bug 0 / fix 1), by signature, by the running session's mmap'd inode (this very session — patched dogfooding), and by launch timing.
+
 ## 2026-06-27
 
 ### Changed
