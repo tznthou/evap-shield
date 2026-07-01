@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-01
+
+### Changed
+
+- tested badge 更新到 **2.1.197**。Claude Code 從 2.1.196 → 2.1.197（連續版號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±120 bytes 的窗口與 2.1.196 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必，這是連續第 6 個 raw 凍結的 build（繼 187→191、191→193、193→195、195→196、再到 196→197），延續 2.1.187 以來不間斷的 raw 凍結。結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0）。原廠 binary 長了 1.4 MB（225,782,608 → 227,251,472），site 漂移 100,324 bytes（202,588,168 → 202,688,492），證明是貨真價實的新 build、parser 原地凍結。strings diff 顯示新增的 3,526 條（與移除的 3,368 條）短字串全落在別處——tool/agent/context/task/model/MCP/auth 跨子系統——tokenizer（+22）和 parser（+64）數量微乎其微，無一碰字元級 string tokenizer。這是 2.1.181 以來官方第 **10** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `8cc0c4d1…` → patched `e94ede6d…`），並在磁碟（bug 0／fix 1）、簽章、running session mmap inode（即本 session——patched dogfooding）、啟動時序四處驗證。
+
 ## 2026-06-30
 
 ### Changed

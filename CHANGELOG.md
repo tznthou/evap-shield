@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-07-01
+
+### Changed
+
+- Bumped the tested badge to **2.1.197**. Claude Code updated 2.1.196 → 2.1.197 (consecutive). A two-way binary diff confirms VH1 remains unpatched upstream: the ±120-byte window around the parser site is byte-for-byte identical to 2.1.196 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, the sixth raw-frozen build in a row (after 187→191, 191→193, 193→195, 195→196, and now 196→197) and unbroken since 2.1.187. The structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0). The factory binary grew 1.4 MB (225,782,608 → 227,251,472) and the site drifted 100,324 bytes (202,588,168 → 202,688,492), confirming a genuinely new build with the parser frozen in place. A strings diff puts all 3,526 added (and 3,368 removed) short strings elsewhere — tool/agent/context/task/model/MCP/auth subsystems — with tokenizer (+22) and parser (+64) counts minimal and none touching the character-level string tokenizer. This is the **tenth** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193, 195, 196) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `8cc0c4d1…` → patched `e94ede6d…`), verified on disk (bug 0 / fix 1), by signature, by the running session's mmap'd inode (this very session — patched dogfooding), and by launch timing.
+
 ## 2026-06-30
 
 ### Changed
