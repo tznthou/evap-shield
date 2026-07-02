@@ -9,6 +9,7 @@ PASS=0
 FAIL=0
 export EVAP_SHIELD_STATE_DIR="/tmp/evap-shield-test-state-$$"
 COUNTER_FILE="$EVAP_SHIELD_STATE_DIR/evap-shield-counter"
+HISTORY_FILE="$EVAP_SHIELD_STATE_DIR/evap-shield-nonempty"
 export EVAP_SHIELD_LOG_DIR="/tmp/evap-shield-test-$$"
 mkdir -p "$EVAP_SHIELD_LOG_DIR"
 
@@ -21,7 +22,7 @@ trap cleanup EXIT
 assert_pass() {
   local desc="$1"
   local payload="$2"
-  rm -f "$COUNTER_FILE"
+  rm -f "$COUNTER_FILE" "$HISTORY_FILE"
   if printf '%s' "$payload" | bash "$HOOK" >/dev/null 2>/dev/null; then
     echo "  PASS: $desc"
     PASS=$((PASS + 1))
@@ -34,13 +35,13 @@ assert_pass() {
 assert_block() {
   local desc="$1"
   local payload="$2"
-  rm -f "$COUNTER_FILE"
+  rm -f "$COUNTER_FILE" "$HISTORY_FILE"
   local stderr_out
   if stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null); then
     echo "  FAIL: $desc (expected block, got pass)"
     FAIL=$((FAIL + 1))
   else
-    if echo "$stderr_out" | grep -q "STREAMING PARSER BUG"; then
+    if echo "$stderr_out" | grep -q "EMPTY TOOL ARGUMENTS BLOCKED"; then
       echo "  PASS: $desc"
       PASS=$((PASS + 1))
     else
@@ -55,7 +56,7 @@ assert_block() {
 assert_failopen() {
   local desc="$1"
   local payload="$2"
-  rm -f "$COUNTER_FILE"
+  rm -f "$COUNTER_FILE" "$HISTORY_FILE"
   local stderr_out exit_code=0
   stderr_out=$(printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
   if [[ "$exit_code" -eq 0 && -z "$stderr_out" ]]; then
@@ -107,9 +108,6 @@ assert_block "Bash with empty args" \
 assert_block "Read with null file_path" \
   '{"tool_name":"Read","tool_input":{"file_path":null},"session_id":"test-2"}'
 
-assert_block "MCP tool with empty args" \
-  '{"tool_name":"mcp__ccrecall__recall_query","tool_input":{},"session_id":"test-2"}'
-
 assert_block "Edit with partial args (missing old_string)" \
   '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/test.txt"},"session_id":"test-2"}'
 
@@ -121,6 +119,48 @@ assert_block "Write with only content (missing file_path)" \
 
 assert_block "Write with null content" \
   '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt","content":null},"session_id":"test-2"}'
+
+echo ""
+echo "── MCP session-history gate ──"
+# MCP tools carry no schema a hook can read, so {} is judged by per-session
+# history: first {} passes (may be a legit zero-arg tool), {} after a
+# non-empty call blocks (the VH1 poisoning signature), other sessions are
+# unaffected. Steps share state deliberately — no rm between them.
+
+rm -f "$COUNTER_FILE" "$HISTORY_FILE"
+if printf '{"tool_name":"mcp__t__ctx","tool_input":{},"session_id":"hist-1"}' | bash "$HOOK" >/dev/null 2>&1; then
+  echo "  PASS: first {} with no history passes (zero-arg tool tolerated)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: first {} with no history should pass"
+  FAIL=$((FAIL + 1))
+fi
+
+printf '{"tool_name":"mcp__t__ctx","tool_input":{"a":1},"session_id":"hist-1"}' | bash "$HOOK" >/dev/null 2>&1 || true
+if grep -Fxq -- "hist-1:mcp__t__ctx" "$HISTORY_FILE" 2>/dev/null; then
+  echo "  PASS: non-empty call records session:tool history"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: non-empty call should record history"
+  FAIL=$((FAIL + 1))
+fi
+
+hist_stderr=$(printf '{"tool_name":"mcp__t__ctx","tool_input":{},"session_id":"hist-1"}' | bash "$HOOK" 2>&1 >/dev/null) && hist_ec=0 || hist_ec=$?
+if [[ "$hist_ec" -eq 2 ]] && echo "$hist_stderr" | grep -q "after sending non-empty arguments"; then
+  echo "  PASS: {} after non-empty call blocks with the history evidence"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: {} after non-empty call should block (exit=$hist_ec)"
+  FAIL=$((FAIL + 1))
+fi
+
+if printf '{"tool_name":"mcp__t__ctx","tool_input":{},"session_id":"hist-2"}' | bash "$HOOK" >/dev/null 2>&1; then
+  echo "  PASS: history is per-session ({} in another session passes)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: history must not leak across sessions"
+  FAIL=$((FAIL + 1))
+fi
 
 echo ""
 echo "── Malformed payload (should FAIL OPEN — silent exit 0) ──"
@@ -184,6 +224,26 @@ for i in 1 2 3; do
 done
 
 echo ""
+echo "── Counter with pre-existing entries from other sessions ──"
+# Regression guard for the "0\n0" bug (seen live 2026-06-30): when the counter
+# file exists but holds no entry for this session:tool, `grep -c` prints 0 AND
+# exits 1 — the old `|| echo 0` stacked a second 0 and broke the arithmetic.
+
+rm -f "$COUNTER_FILE" "$HISTORY_FILE"
+echo "other-session:OtherTool" > "$COUNTER_FILE"
+dirty_stderr=$(printf '{"tool_name":"Read","tool_input":{},"session_id":"dirty-1"}' | bash "$HOOK" 2>&1 >/dev/null || true)
+if echo "$dirty_stderr" | grep -q "syntax error"; then
+  echo "  FAIL: dirty counter file triggers shell syntax error"
+  FAIL=$((FAIL + 1))
+elif echo "$dirty_stderr" | grep -q "Blocked calls in this session: 1"; then
+  echo "  PASS: dirty counter file still counts cleanly (1, no syntax error)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: dirty counter file should count 1 (got: $(echo "$dirty_stderr" | grep 'Blocked calls'))"
+  FAIL=$((FAIL + 1))
+fi
+
+echo ""
 echo "── Log file ──"
 
 LOG_COUNT=$(wc -l < "$EVAP_SHIELD_LOG_DIR/evap-shield.log.jsonl" 2>/dev/null || echo 0)
@@ -202,6 +262,15 @@ if grep -q '"input"' "$EVAP_SHIELD_LOG_DIR/evap-shield.log.jsonl" 2>/dev/null; t
 else
   echo "  PASS: Log is redacted (no raw input)"
   PASS=$((PASS + 1))
+fi
+
+if grep -q '"action":"blocked"' "$EVAP_SHIELD_LOG_DIR/evap-shield.log.jsonl" 2>/dev/null \
+   && grep -q '"action":"allowed"' "$EVAP_SHIELD_LOG_DIR/evap-shield.log.jsonl" 2>/dev/null; then
+  echo "  PASS: Log records both blocked and allowed actions"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: Log should record both blocked and allowed actions"
+  FAIL=$((FAIL + 1))
 fi
 
 echo ""

@@ -55,7 +55,7 @@ Two independent layers, either works alone:
 | Layer | What it does | Survives `claude update`? |
 |-------|-------------|---------------------------|
 | **Patch** (`patch-vh1.sh`) | Flips the negated gate flag to `!0` in the VH1 tokenizer (1 byte, same length). The match is structural — anchored on the parser's invariant, not minified variable names — so it survives bundler reshuffles across versions (e.g. the Bun 1.4 rename in 2.1.181). Partial strings get pushed instead of dropped, so `{}` never forms at the source — for every tool. | No — re-run after each update |
-| **Hook** (`evap-shield.sh`) | PreToolUse hook that blocks `{}` calls to **MCP tools** — the one gap Claude Code's built-in validation doesn't cover (see [Design Decisions](#design-decisions)). Also logs `{}` events so you can tell whether the bug is firing. | Yes |
+| **Hook** (`evap-shield.sh`) | PreToolUse hook that blocks `{}` calls to **MCP tools** — the one gap Claude Code's built-in validation doesn't cover (see [Design Decisions](#design-decisions)). Judged by per-session history: `{}` is blocked only for a tool that already sent non-empty arguments in the same session (the VH1 poisoning signature); a first `{}` passes, because legitimately zero-argument MCP tools exist. Logs both, so you can tell whether the bug is firing. | Yes |
 
 The patch is the root fix — it stops `{}` from forming at all. The hook is the no-restart safety net for MCP tools, and your observability into whether the bug is live.
 
@@ -72,7 +72,7 @@ The patch is the root fix — it stops `{}` from forming at all. The hook is the
 | `bash patch-vh1.sh --restore` | Restore the original binary from per-hash backup |
 | `bash patch-vh1.sh --dry-run` | Preview patch without applying |
 | `bash check-update.sh` | Report VH1 patch status when Claude Code was updated (the SessionStart hook runs this) |
-| `bash test-evap-shield.sh` | Run the hook test suite (25 tests) |
+| `bash test-evap-shield.sh` | Run the hook test suite (30 tests) |
 | `bash test-patch-vh1.sh` | Run the patcher failure-path suite (45 tests) |
 | `bash test-install.sh` | Run the installer merge-safety suite (26 tests) |
 | `bash test-check-update.sh` | Run the update-detector suite (21 tests) |
@@ -184,7 +184,7 @@ evap-shield/
   check-update.sh       # SessionStart hook — reports if an update wiped the patch
   install.sh            # One-command installer for both hooks
   patch-vh1.sh          # Binary patch automation (locate → backup → patch → verify)
-  test-evap-shield.sh   # Hook test suite (25 tests)
+  test-evap-shield.sh   # Hook test suite (30 tests)
   test-patch-vh1.sh     # Patcher failure-path tests (45 tests)
   test-install.sh       # Installer merge-safety tests (26 tests)
   test-check-update.sh  # Update-detector tests (21 tests)
@@ -227,6 +227,8 @@ We built evap-shield because waiting wasn't an option.
 
 **A PreToolUse hook, scoped to the MCP gap.** We considered MCP-server middleware (schema-aware rejection of `{}`) and chose a PreToolUse hook, which receives the full `tool_input` payload. Its effective scope is the MCP surface: a `{}` to a built-in tool (Read, Edit, Bash) is rejected by Claude Code's own validation, which runs *before* PreToolUse hooks, so the hook never sees it. The hook fires only for **MCP tools**, whose validation runs *after* it. Built-in tools are covered by Claude Code itself; the hook closes the MCP gap and logs `{}` events so you know the bug is live.
 
+**A session-history gate, not a blanket `{}` block.** A hook can't read MCP schemas, and legitimately zero-argument MCP tools exist — a blanket "block every MCP `{}`" mistakes their normal calls for the bug (observed live on 2026-06-30: a legal zero-argument context call was blocked and the model was told to `/clear` a healthy session). So the hook keys on the bug's actual signature instead: VH1 poisoning is per-tool and sticky — a tool sends real arguments, then collapses to `{}` and stays empty. The hook records, per session, which tools have sent non-empty arguments; a `{}` blocks only for a tool with that history. A first `{}` passes (and is logged as `allowed`), which trades the first evaporated call — usually a harmless server-side validation error — for near-zero false positives. Since a poisoned tool stays empty, the second call and every one after is still caught.
+
 **Two layers, not one.** The patch fixes the parser at the source — every tool — but gets wiped on each update. The hook survives updates and needs no restart, but only covers the MCP gap. So the patch is the root fix, and the hook is the permanent net for the window when the patch isn't active (after an update, before you re-run it). Either works alone.
 
 **Per-hash backups, not per-version.** `--restore` must only restore the exact binary that was patched. If the user runs `claude update` between patch and restore, the backup is from a different version. Matching on SHA-256 prevents silent corruption — and the restore itself verifies the backup's hash before trusting it, then swaps it in atomically with `rename()` so an interrupted rollback can never leave a truncated binary.
@@ -238,6 +240,7 @@ We built evap-shield because waiting wasn't an option.
 ## Technical Limitations
 
 - **The hook does not protect built-in tools.** A `{}` to Read, Edit, Bash, etc. is rejected by Claude Code's own validation *before* the PreToolUse hook runs, so the hook never sees it. The required-field map lists built-ins for completeness, but in practice the hook only ever fires for **MCP tools** (`mcp__*`), whose validation runs after it. Built-in `{}` is handled by Claude Code itself, not by this hook.
+- **The hook lets the first `{}` through.** The session-history gate blocks a `{}` only for a tool that already sent non-empty arguments in the same session. A tool whose *first* call in a session evaporates is passed through to the MCP server (typically a server-side validation error, and it is logged as `allowed`) — the price of not blocking legitimately zero-argument tools, whose `{}` is indistinguishable from the bug without history. A tool that takes arguments *sometimes* (optional-only schemas) can still be blocked on an intentional `{}` after a non-empty call; the block message tells the model how to signal that.
 - **The patch's root-fix effect is unit-verified, not end-to-end.** 760/0 streaming-boundary unit cases confirm partial tokens are pushed instead of dropped; full end-to-end confirmation isn't observable through a server mock (the affected parser path is structurally unreachable from the outside). It's unit-proof plus structural inference.
 - The binary patch anchors on a structural invariant in the parser, not minified variable names, so it survives bundler/minifier reshuffles across versions (verified across the 2.1.181 Bun 1.4 rename). If Anthropic restructures the parser itself, the patcher refuses to patch rather than corrupt it (safe failure, not silent corruption).
 - The patch does not survive `claude update`. Re-run `patch-vh1.sh` after each update — the SessionStart hook (`check-update.sh`) detects the update and reminds you, but the re-patch itself stays manual by design.

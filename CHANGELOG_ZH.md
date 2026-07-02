@@ -8,7 +8,13 @@
 
 ## 2026-07-02
 
+### Fixed
+
+- **Hook：counter file 存在、但當前 session+tool 沒有紀錄時，計數算術會爆掉。** `grep -c` 在無 match 時會印出 `0` *且* exit 1，舊寫法的 `|| echo 0` 因此疊上第二個零（`0\n0`），讓 block 訊息夾帶 shell `syntax error` 噪音，也讓「3 次升級 CRITICAL」的邏輯失效。2026-06-30 真實環境實測到（訊息顯示「Blocked calls in this session: 0\n0」）。現在計數只取 `grep` 的輸出、外加數字格式保底；並補上 regression 測試涵蓋「髒 counter file」情境——舊測試套件每次都從刪掉的 counter file 起跑，從未踩到這個分支。
+
 ### Changed
+
+- **Hook：MCP `{}` 改依 per-session 歷史判定，不再無條件擋。** 舊的無差別規則在真實環境唯一一次觸發就是誤判：一次合法的零參數 MCP 呼叫（`tabs_context_mcp`，schema 全 optional）被擋下，模型還被告知參數「重試也會是空的」、該對一個健康的 session 執行 `/clear`。Hook 讀不到 MCP schema，光憑一個 `{}` 沒有訊號——但 VH1 中毒的特徵有：tool 在同一個 session 裡先送過真參數、然後塌縮成 `{}`。Hook 現在以 session 為單位記錄非空的 MCP 呼叫（`~/.claude/state/evap-shield-nonempty`），只擋帶著這個歷史的 tool 的 `{}`；首發 `{}` 放行並記錄為 `allowed`。Block 訊息改以歷史證據開頭、拿掉無條件的「已知 bug」斷言、加上「刻意空呼叫」的出口。Log 每行新增 `action` 欄位（`blocked`／`allowed`）。Hook 測試套件：25 → 30 tests（歷史閘門三態、跨 session 隔離、髒 counter、log action）。
 
 - tested badge 更新到 **2.1.198**。Claude Code 從 2.1.197 → 2.1.198（連續版號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±260 bytes 的窗口與 2.1.197 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必，這是連續第 7 個 raw 凍結的 build（繼 187→191、191→193、193→195、195→196、196→197，再到 197→198），延續 2.1.187 以來不間斷的 raw 凍結。結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 在兩版都恰好出現 7 次，一次不差。原廠 binary 長了 2.08 MB（227,251,472 → 229,328,464），site 漂移 3,048,115 bytes（202,688,492 → 205,736,607），證明是貨真價實的新 build、parser 原地凍結。strings diff 顯示新增的 15,452 條（與移除的 3,719 條）短字串主要對應這版兩項主打新功能——highlight.js 11 語法高亮升級（大量各語言關鍵字字典）與新增的 `/dataviz` skill（色票驗證器、圖表設計文案）——tokenizer 新增字串為 0、parser 相關命中 31 條全是通用語意（argparse、YAML、Storybook、proxy response），無一碰字元級 string tokenizer。這是 2.1.181 以來官方第 **11** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `ab6f7ee1…` → patched `5b923d8e…`），並在磁碟（bug 0／fix 1）、簽章、running session mmap inode（即本 session，啟動時間晚於 patch 完成 19 秒——patched dogfooding）、啟動時序四處驗證。
 
