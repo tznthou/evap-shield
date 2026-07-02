@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-07-02
+
+### Changed
+
+- Bumped the tested badge to **2.1.198**. Claude Code updated 2.1.197 → 2.1.198 (consecutive). A two-way binary diff confirms VH1 remains unpatched upstream: the ±260-byte window around the parser site is byte-for-byte identical to 2.1.197 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, the seventh raw-frozen build in a row (after 187→191, 191→193, 193→195, 195→196, 196→197, and now 197→198) and unbroken since 2.1.187. The structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0), and the character-scan loop signature `e[++t]` appears the same 7 times in both binaries. The factory binary grew 2.08 MB (227,251,472 → 229,328,464) and the site drifted 3,048,115 bytes (202,688,492 → 205,736,607), confirming a genuinely new build with the parser frozen in place. A strings diff puts all 15,452 added (and 3,719 removed) short strings elsewhere — the bulk traces to this release's two headline additions, a highlight.js 11 syntax-highlighting upgrade (large per-language keyword dictionaries) and the new `/dataviz` skill (color-palette validator, chart-design copy) — with zero new tokenizer strings and 31 generic `parse` hits (argparse, YAML, Storybook, proxy responses), none touching the character-level string tokenizer. This is the **eleventh** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193, 195, 196, 197) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `ab6f7ee1…` → patched `5b923d8e…`), verified on disk (bug 0 / fix 1), by signature, by the running session's mmap'd inode (this very session, launched 19 seconds after the patch completed — patched dogfooding), and by launch timing.
+
 ## 2026-07-01
 
 ### Changed

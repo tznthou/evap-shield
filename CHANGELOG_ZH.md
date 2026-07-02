@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-02
+
+### Changed
+
+- tested badge 更新到 **2.1.198**。Claude Code 從 2.1.197 → 2.1.198（連續版號）。兩路 binary diff 確認官方仍未修 VH1：parser site 前後 ±260 bytes 的窗口與 2.1.197 逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必，這是連續第 7 個 raw 凍結的 build（繼 187→191、191→193、193→195、195→196、196→197，再到 197→198），延續 2.1.187 以來不間斷的 raw 凍結。結構錨點掃整個 binary 也只有 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 在兩版都恰好出現 7 次，一次不差。原廠 binary 長了 2.08 MB（227,251,472 → 229,328,464），site 漂移 3,048,115 bytes（202,688,492 → 205,736,607），證明是貨真價實的新 build、parser 原地凍結。strings diff 顯示新增的 15,452 條（與移除的 3,719 條）短字串主要對應這版兩項主打新功能——highlight.js 11 語法高亮升級（大量各語言關鍵字字典）與新增的 `/dataviz` skill（色票驗證器、圖表設計文案）——tokenizer 新增字串為 0、parser 相關命中 31 條全是通用語意（argparse、YAML、Storybook、proxy response），無一碰字元級 string tokenizer。這是 2.1.181 以來官方第 **11** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `ab6f7ee1…` → patched `5b923d8e…`），並在磁碟（bug 0／fix 1）、簽章、running session mmap inode（即本 session，啟動時間晚於 patch 完成 19 秒——patched dogfooding）、啟動時序四處驗證。
+
 ## 2026-07-01
 
 ### Changed
