@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-07-03
+
+### Changed
+
+- Bumped the tested badge to **2.1.199**. Claude Code updated 2.1.198 → 2.1.199 (consecutive). A two-way binary diff confirms VH1 remains unpatched upstream: the ±260-byte window around the parser site is byte-for-byte identical to 2.1.198 — still `,!l)n.push({type:"string",value:a})`, no normalization needed, the eighth raw-frozen build in a row (unbroken since 2.1.187). The structural anchor still finds exactly one vulnerable site in the whole binary (bug 1 / fix 0), and the character-scan loop signature `e[++t]` appears the same 7 times in both binaries. The factory binary grew 2.83 MB (229,328,464 → 232,155,536) and the site drifted 1,326,226 bytes (205,736,607 → 207,062,833), confirming a genuinely new build with the parser frozen in place. A strings diff puts all 4,031 added (and 2,708 removed) short strings elsewhere — roughly 1,400 are bundler-generated class-constructor guards (`Cannot call a class constructor _XX without |new|`, a toolchain-level change), and the rest is dominated by CSS design tokens (violet/magenta/neutral palettes, `--hl-*` highlight theme, Anthropic Sans/Mono) for a UI template layer — with zero new tokenizer strings and a single generic `parse` hit (`parseRepoSlug`), none touching the character-level string tokenizer. This is the **twelfth** effective upstream release since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193, 195, 196, 197, 198) to leave VH1 unfixed. The version-agnostic patcher re-applied with no script change (`!l`→`!0`, one byte; original `e3cb61ab…` → patched `c154554c…`), verified on disk (bug 0 / fix 1), by signature, and by the running session's mmap'd inode (this very session, launched 21 seconds after the patch completed — patched dogfooding).
+
 ## 2026-07-02
 
 ### Fixed
