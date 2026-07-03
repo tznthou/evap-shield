@@ -42,7 +42,7 @@ Claude Code's streaming JSON parser has a flaw in its string tokenizer (function
 
 Your AI can think. It just can't act. And it doesn't know why.
 
-Tracked in [#62123](https://github.com/anthropics/claude-code/issues/62123) (57 comments, zero staff response as of 2026-06-24) and root-caused in [#67765](https://github.com/anthropics/claude-code/issues/67765).
+Tracked in [#62123](https://github.com/anthropics/claude-code/issues/62123) (61 comments, zero staff response as of 2026-07-03) and root-caused in [#67765](https://github.com/anthropics/claude-code/issues/67765).
 
 **Affected**: Opus 4.7, Opus 4.8, Sonnet 4.5. **Not affected**: Opus 4.6, Sonnet 4.6.
 
@@ -245,6 +245,7 @@ We built evap-shield because waiting wasn't an option.
 - The binary patch anchors on a structural invariant in the parser, not minified variable names, so it survives bundler/minifier reshuffles across versions (verified across the 2.1.181 Bun 1.4 rename). If Anthropic restructures the parser itself, the patcher refuses to patch rather than corrupt it (safe failure, not silent corruption).
 - The patch does not survive `claude update`. Re-run `patch-vh1.sh` after each update — the SessionStart hook (`check-update.sh`) detects the update and reminds you, but the re-patch itself stays manual by design.
 - The hook cannot prevent the model from retrying in a loop before the hook fires. The error message is written as a terminal instruction to stop the model, but this depends on model compliance.
+- **Model-side failure shapes are out of scope — for the patch, the hook, and any client-side tool.** The antml-prefix-dropped family (tool calls leaking as `<invoke>` XML text with a stray c-initial token — `câ`/`call`/`court`/`count`) and confabulation (fabricated tool results, imagined tool runs, and false "prompt injection detected" / "environment corrupted" alerts) originate in the model's generation layer, upstream of anything a client can patch. What this repo offers there is triage, not defense: fingerprint which shape you're hitting (empty `{}` args vs. leaked XML vs. claims that don't match the transcript) so you know whether to patch, retry, restart the session, or re-verify the model's claimed work. See the [2026-07-03 forensics comment in #62123](https://github.com/anthropics/claude-code/issues/62123#issuecomment-4878159880).
 
 ---
 

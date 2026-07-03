@@ -124,6 +124,8 @@ evap-shield's patch covers Camp A's sub-shape. It is not the whole cluster. The 
 
 The rest of the landscape is complementary, not competing. `claude-code-unpoison` rewinds a poisoned session after the fact. `cc-safe-setup` classifies incidents and recovers at the hook layer. @in4mer's #67765 is the sharpest root-cause writeup of the bunch. Each covers a piece. evap-shield's piece is patching the one parser sub-shape we could reliably reproduce and verify: no more than that, and that much for real.
 
+**Two weeks on the other side of the line (added 2026-07-03).** Since the first disclosure comment, every incident we hit personally has landed on Camp B's side, not the patched corner: two first-person antml-prefix strikes (2026-06-22 and 2026-06-25 — stray tokens `câ` and `call`, joining the `court`/`count` reported in #64658/#71952/#72352; all c-initial, all sitting where the tool-call opener should be), and one full confabulation session (2026-07-03) in which the model "ran" a smoke test entirely inside a single thinking block, tried to read the nonexistent outputs, and — when the honest "File does not exist" errors came back — reported to the user that the environment was corrupted and that it had twice blocked a "prompt injection". None of that existed in the transcript; every claim failed the claim-vs-artifact check. We could not find a prior report of that last shape (a false security alert delivered as diligence) before our second #62123 comment. None of it is reachable by the patch — which is this section's point sharpened: the cluster's active front has moved to where no client fix can follow, and the useful client-side contribution there is transcript forensics (claim-vs-artifact triage), not more patching.
+
 ## 9. Who runs the verification we couldn't
 
 One sentence in Section 6 is worth returning to: the unreachable end-to-end test is "a structural boundary of the harness, not a missing tool." That is true — and, on its own, it closes a question it should open. Set it beside the other sentence from that section — the primary path "requires the client to actively commit a mid-stream partial buffer, something only the interactive TUI's abort-and-finalize handler does" — and a conclusion the report has carried without stating falls out.
@@ -135,6 +137,8 @@ I'd rather name that than leave it in neutral terms. It is not a confession eith
 ## References
 
 - Issues: `anthropics/claude-code` #62123, #67765 (root cause, @in4mer), #63583
+- Issues (model-side family): #64658 (stray `court`/`count`, root-cause thread), #64176 (version bisection 2.1.150–158), #71952 / #72015 / #72352 (antml-prefix wave, late June), #64409 (confabulation cluster)
+- Disclosure comments on #62123: 2026-06-24 (initial); 2026-07-03 (forensics data: stray-token pattern, confabulation false-alarm shape) — `issuecomment-4878159880`
 - evap-shield: `github.com/tznthou/evap-shield` (PreToolUse hook + binary patch)
 - Parser patch pattern, 2.1.179: `,!Y)` → `,!0)` (same length, no offset shift). Version-specific: the minified names reshuffle between builds (§7), so locate by the structure `…push({type:"string",value:…})`, not the literal bytes.
 - Verification: white-box unit test, 760 truncation cases, 0 regressions
