@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-04
+
+### Changed
+
+- tested badge 更新到 **2.1.201**，一次補上兩個改版——Claude Code 從 2.1.199 → 2.1.200（2.1.200 昨晚更新，已驗證但未單獨記錄）→ 2.1.201。兩個 transition 官方都沒修 VH1：parser site 前後 ±260 bytes 的窗口在 2.1.199、2.1.200、2.1.201 三版逐字相同——仍是 `,!l)n.push({type:"string",value:a})`，連 normalize 都不必——這是連續第 9、第 10 個 raw 凍結的 build（延續 2.1.187 以來不間斷的 raw 凍結）。結構錨點掃各版原廠 binary 都只有 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 在三版都恰好出現 7 次。build 溯源：2.1.199 → 2.1.200 縮了 446,752 bytes（232,155,536 → 231,708,784），site 漂移 799,552 bytes（207,062,833 → 207,862,385）；2.1.200 → 2.1.201 是罕見案例——兩個原廠 binary *完全*都是 231,708,784 bytes，但**並非**逐字相同（首個相異在 offset 2112，一個 Mach-O load-command 位址欄位），parser site 仍漂移了 64 bytes（207,862,385 → 207,862,449），證明是貨真價實的新 build、只是重打包後恰好同 size。2.1.200 → 2.1.201 的 strings diff 顯示新增 158 條、移除 160 條短字串，無一碰字元級 string tokenizer（沒有新增 `charCode`／`codePoint`／`tokenizer`）——新增字串以 gateway／session／feature-flag 層為大宗（`allowedHttpHookUrls`、`disableRemoteControl`、`disableClaudeAiConnectors`、`/workflows`、Sessions-API 標籤），無一觸及 parser。這是 2.1.181 以來官方第 **13、14** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套到 2.1.201（`!l`→`!0`，1 byte；原廠 `a0852d76…` → patched `a9941c6f…`），並在磁碟（bug 0／fix 1）+ 有效 ad-hoc 簽章、running session mmap inode（PID 45409/50688 都持有 inode 57281235——patched dogfooding）驗證。
+
 ## 2026-07-03
 
 ### Changed

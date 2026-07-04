@@ -6,6 +6,12 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-07-04
+
+### Changed
+
+- Bumped the tested badge to **2.1.201**, folding in two upstream releases at once — Claude Code updated 2.1.199 → 2.1.200 (the 2.1.200 bump landed overnight and was verified but not separately recorded) → 2.1.201. Both transitions leave VH1 unpatched upstream: the ±260-byte window around the parser site is byte-for-byte identical across 2.1.199, 2.1.200 and 2.1.201 — still `,!l)n.push({type:"string",value:a})`, no normalization needed — the ninth and tenth raw-frozen builds in a row (unbroken since 2.1.187). The structural anchor finds exactly one vulnerable site in each factory binary (bug 1 / fix 0), and the `e[++t]` character-scan loop signature appears the same 7 times in all three. Build provenance: 2.1.199 → 2.1.200 shrank 446,752 bytes (232,155,536 → 231,708,784) with the site drifting 799,552 bytes (207,062,833 → 207,862,385); 2.1.200 → 2.1.201 is the unusual case — both factory binaries are *exactly* 231,708,784 bytes, yet they are **not** byte-identical (first difference at offset 2112, a Mach-O load-command address field) and the parser site still drifted 64 bytes (207,862,385 → 207,862,449), confirming a genuinely new build that merely repacked to the same size. A strings diff over 2.1.200 → 2.1.201 shows 158 short strings added and 160 removed, with zero touching the character-level string tokenizer (no `charCode`/`codePoint`/`tokenizer` additions) — the added set is dominated by gateway/session/feature-flag surface (`allowedHttpHookUrls`, `disableRemoteControl`, `disableClaudeAiConnectors`, `/workflows`, Sessions-API labels), none reaching the parser. These are the **thirteenth and fourteenth** effective upstream releases since 2.1.181 (after 2.1.183, 185, 186, 187, 190, 191, 193, 195, 196, 197, 198, 199) to leave VH1 unfixed. The version-agnostic patcher re-applied to 2.1.201 with no script change (`!l`→`!0`, one byte; factory `a0852d76…` → patched `a9941c6f…`), verified on disk (bug 0 / fix 1) with a valid ad-hoc signature and by the running session's mmap'd inode (PIDs 45409/50688 both hold inode 57281235 — patched dogfooding).
+
 ## 2026-07-03
 
 ### Changed
