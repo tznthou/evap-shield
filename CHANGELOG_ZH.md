@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-07
+
+### Changed
+
+- tested badge 更新到 **2.1.202**。Claude Code 從 2.1.201 → 2.1.202（連續版號）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次——但這是 2.1.181 以來頭一次，site 周圍的窗口不是逐字相同：2.1.201 的 `,!l)n.push({type:"string",value:a})`(迴圈字元變數 `r`、數字測試變數 `s`)變成 2.1.202 的 `,!l)r.push({type:"string",value:a})`(迴圈字元變數 `n`、數字測試變數 `i`)——迴圈變數與接收端變數對調（`r`↔`n`），數字測試用的 helper 改名（`s`→`i`），flag（`l`）與累加變數（`a`）不變。兩版的 Bun runtime banner（`Bun v1.4.0`／`Bun/1.4.0`）相同，所以這比較像同一支模組區域性重編譯、把 minifier 的命名往後推了一格，不是像 2.1.181 那種 runtime／bundler 升級——結構錨點認的是 `type:"string"` 這個 AST tag、不是識別字命名，本來就是為了扛住這種情況設計的。build 溯源：原廠 size 長了 231,708,784 → 243,631,376 bytes（+11.4 MB，這份紀錄裡單一版號最大的一次跳動），parser site 漂移 207,862,449 → 215,221,436（+7,358,987 bytes）。strings diff（新增 5,819、移除 5,251，同樣是目前最大量）與官方 2.1.202 changelog 的敘述吻合：新增 `/config` 的「Dynamic workflow size」設定、`workflow.run_id`／`workflow.name` OpenTelemetry 屬性、`/workflows` 版面調整——新增字串裡的 `CORRECTNESS_ANGLES`、`finder_budget`、隨附的「Managed Agents」參考文件、一個 Storybook-source 轉換器都對得上。官方有一行「Fixed workflow scripts with unicode quote escapes in strings being corrupted before parsing」值得點名，以免被誤認跟 VH1 有關：那是驗證使用者自寫 workflow script 的 acorn 風格 JS 原始碼解析器（`ecmaVersion:"latest",sourceType:"module"`，兩版都在、只是位置挪動），跟本 repo 要修的字元級 JSON tokenizer 是不同層的不同 parser。strings diff 裡約 122 條 charCode／codePoint／tokenizer 風味的命中，追下去也是同一批既有 library 程式碼隨重建搬位造成的，不是新的 tokenizer 邏輯。這是 2.1.181 以來官方第 **15** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201 後）仍未修 VH1。version-agnostic patcher 零腳本改動重套(`!l`→`!0`，1 byte；原廠 `7414f707861e…` → patched `a13d8253c64a…`)，並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（patched dogfooding）。另記一筆磁碟層級的小發現：patched 檔案比原廠小 1,417,536 bytes——不是內容 patch 本身（同長度的 1-byte 翻轉）造成的，而是重簽章：Apple 的 Developer ID CodeDirectory（1,888,837 bytes、59,015+7 個 hash slot，外加 9,047 bytes 的憑證鏈簽章）被換成較小的 ad-hoc CodeDirectory（472,288 bytes、14,754+2 個 slot，沒有憑證 blob），差不多解釋了全部落差——這是 ad-hoc 重簽章已知的機械性後果，不是內容被動了手腳。
+
 ## 2026-07-04
 
 ### Changed
