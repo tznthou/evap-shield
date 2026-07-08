@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-08
+
+### Changed
+
+- tested badge 更新到 **2.1.204**。這台機器上 Claude Code 從 2.1.202 → 2.1.204——2.1.203 官方有出但這台機器從未裝過（`~/.local/share/claude/versions/` 只留著 201、202、204），所以這篇是直接跨版兩點 diff，不是逐版鏈接。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.202 逐字相同——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——代表 2.1.202 那次識別字重排（2.1.187 以來 raw 凍結首度被打破）是單一事件，不是新一輪改名節奏的開端。build 溯源：原廠 size 縮了 6.67 MB（243,631,376 → 236,961,904 bytes），parser site 漂移 −5,569,911 bytes（215,221,436 → 209,651,525）。這個縮減跟官方自己的說法對得上：2.1.203 的 changelog（37 條、大多是 background-agent／daemon／worktree／session 修復）裡有一條「Reduced binary size by ~7 MB and startup memory by ~7 MB by loading a large bundled dependency lazily instead of inlining it」——跟量到的 6.67 MB 對得夠近，不必另找解釋。2.1.203 跟 2.1.204(只有一條：headless session 裡 SessionStart hook streaming 的修復)的 changelog 都沒有一條碰 tool-call parsing 或 string tokenization。strings diff（新增 5,140、移除 3,094）裡新增字串只有兩條沾到 charCode／codePoint／tokenizer 味，都追到既有 library 程式碼隨重建搬位：一個是 markdown renderer 自己的 tokenizer（`this.tokenizer.code`，來自 `marked`），一個是 JS 語法 library 的 lexer 錯誤字串（`Unable to Tokenize because Errors detected in definition of Lexer`，來自 `chevrotain`）——都不是本 repo 要修的字元級 JSON string tokenizer。新增字串大宗落在新功能面：WebGL shader／blend 程式碼（約 35 條命中，一個 canvas 渲染功能）、`chevrotain` 這個 parser-generator library 本身（13 條）、以及 `workflow`／`schedule`／`routine` 風味的字串（合計 19 條），這些對得上本 session 自己剛拿到的 `Cron*`、`RemoteTrigger` 工具。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `1677b67595b6…` → patched `c5ca6692a3f5…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，執行檔解析到 `~/.local/share/claude/versions/2.1.204`，inode 58124573，patch 完成後 22 秒才啟動——patched dogfooding）。這是 2.1.181 以來官方第 **16** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202 後）仍未修 VH1。
+
 ## 2026-07-07
 
 ### Changed
