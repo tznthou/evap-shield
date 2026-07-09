@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-09
+
+### Changed
+
+- tested badge 更新到 **2.1.205**。Claude Code 從 2.1.204 → 2.1.205——這次是連續版本，兩者都裝在本機（`~/.local/share/claude/versions/` 現在有 202、204、205），所以是直接跨版兩點 diff；2.1.203 仍是唯一跳過的版本。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.204 逐字相同——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續三版（2.1.202、2.1.204、2.1.205）都帶同一組區域名稱，更加坐實 2.1.202 那次識別字重排是單一事件，不是新一輪改名節奏。build 溯源：原廠 binary 長回 476,064 bytes（236,961,904 → 237,437,968），parser site 漂移 +396,618 bytes（209,651,525 → 210,048,143）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.205 changelog（22 條）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser：最接近的是一條 `--json-schema` 修復（structured-output 的 *schema 驗證*，不是字元級 JSON string tokenizer），以及「Auto-update binary downloads now stream to disk … cutting the updater's peak memory usage by roughly 400 MB」——那 400 MB 是 updater process 的 RAM，不是 binary 大小（binary 反而長了），跟 2.1.203 那次的磁碟瘦身也是兩回事。另外兩條 model-behavior guardrail（background task 通知現在會明講「no human input has occurred」以阻止 *捏造的 transcript 內批准*、以及一條擋竄改 transcript 檔的 auto-mode 規則）講的是這個 bug cluster 的 model-side confabulation 那一半，不是 VH1 所在的 client parser。strings diff（新增 4,966／移除 4,655）比 2.1.204 那次乾淨的兩條命中吵——新增集裡有約 125 條 charCode／codePoint／tokenizer 味的行——但逐條抽樣，全部落在被重建位移的既有字元處理常式（UTF-8 codec 迴圈、數字掃描器、第三方 `marked`／PowerShell／JSON-number tokenizer），沒有一條是 VH1 的 `push({type:"string",value:…})` site；命中數高只是因為 `strings` 在周圍 bytes 位移後把 minified library 程式碼重新切段，而判決本來就靠結構錨點對 parser-site window 的逐字讀取（跟 2.1.204 相同），從不靠 strings diff。新增集其餘是新功能面：`workflow`／`schedule`／`cron` 字串（約 283 條，對得上本 session 的 `Cron*`／`RemoteTrigger`／`Workflow` 工具）與 WebGL shader／blend 程式碼（約 129 條）。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `33e28624c5ae…` → patched `35a8d68cd2ca…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章（`codesign --verify`：「valid on disk … satisfies its Designated Requirement」）、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 66238，執行檔解析到 `~/.local/share/claude/versions/2.1.205`，inode 58287616——patched dogfooding）。這是 2.1.181 以來官方第 **17** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204 後）仍未修 VH1。
+
 ## 2026-07-08
 
 ### Changed
