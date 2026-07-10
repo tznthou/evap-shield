@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-10
+
+### Changed
+
+- tested badge 更新到 **2.1.206**。Claude Code 從 2.1.205 → 2.1.206——這是 2.1.205 更新隔天早上的另一次獨立更新（三版各有各的日期條目：2.1.204 裝於 2026-07-08、2.1.205 裝於 2026-07-09、2.1.206 裝於 2026-07-10——連續第三天每日一更），且版號再度連續，兩點 diff 不需要跨過任何沒裝的版本；2.1.203 仍是唯一從未裝過的版本（`~/.local/share/claude/versions/` 現在有 204、205、206）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.205 逐字相同——±260 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續四版（2.1.202、2.1.204、2.1.205、2.1.206）都帶同一組區域名稱。build 溯源：原廠 binary 長了 2,957,056 bytes（237,437,968 → 240,395,024），parser site 漂移 +1,153,245 bytes（210,048,143 → 211,201,388）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.206 changelog（27 條）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser——整份都是 CLI/UX 與管線雜項（gateway `/login` 端點、`--mcp-config` 的 `request_timeout_ms` 修復、`/model` picker 列修復、agents view 修復、一個 Bedrock 啟動卡住），沒有比這些更接近 parser 的條目。strings diff（新增 4,548／移除 3,059）在關鍵軸線上是歷來最乾淨的一次：新增集裡 charCode／codePoint／tokenizer 味的行是**零條**（2.1.204 有 2 條、2.1.205 有約 125 條重建重切段命中），13 條泛用 `parse` 命中全落在別處（dataviz HTML 模板裡 chart runtime 的 `JSON.parse`、一條 backend wire-hint 註釋、一條 hosts 檔 regex 說明）。新增集是分散的功能面——CSS design tokens（70 條 `--cds-*`）、chart／dataviz 模板（47 條）、agent 味字串（47 條）、plugin／LSP 管線（約 24 條）、voice mode 文案（7 條）——沒有一條伸進 parser。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `3197aba4442d…` → patched `d60e80d290a4…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 47004，執行檔解析到 `~/.local/share/claude/versions/2.1.206`，inode 58468534，patch 於 2026-07-10T00:23:39Z 完成後三到四分鐘啟動——patched dogfooding）。一條磁碟層註腳：這次 re-sign 讓檔案縮了 1,398,720 bytes，回到 2.1.202 那次的量級而非 2.1.204/205 的 1,184——因為 2.1.206 原廠 CodeDirectory 回到大 slot 版面（58,231+7 個 hash slot、1,863,749 bytes，外加 9,046 bytes 憑證簽章），被 ad-hoc re-sign 換成 14,558+2 slot 的精簡版；這是 re-sign 的機械性後果，不是內容變更。這是 2.1.181 以來官方第 **18** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205 後）仍未修 VH1。
+
 ## 2026-07-09
 
 ### Changed
