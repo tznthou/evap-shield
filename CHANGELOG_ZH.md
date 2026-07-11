@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-11
+
+### Changed
+
+- tested badge 更新到 **2.1.207**。Claude Code 從 2.1.206 → 2.1.207——連續第四天每日一更（2.1.204 裝於 2026-07-08、2.1.205 裝於 2026-07-09、2.1.206 裝於 2026-07-10、2.1.207 裝於 2026-07-11），且版號再度連續，兩點 diff 不需要跨過任何沒裝的版本；2.1.203 仍是唯一從未裝過的版本（`~/.local/share/claude/versions/` 現在有 205、206、207）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.206 逐字相同——±260 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續五版（2.1.202、2.1.204、2.1.205、2.1.206、2.1.207）都帶同一組區域名稱。build 溯源：原廠 binary 長了 842,112 bytes（240,395,024 → 241,237,136），parser site 漂移 +733,820 bytes（211,201,388 → 211,935,208）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.207 changelog（25 條）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser——幾條*聽起來*沾邊的都落在別層：「streaming 超長清單時終端卡頓」是渲染層、「rules globs 的 malformed 括號 pattern 弄壞檔案讀取」是檔案路徑 glob 處理、「agent teams 因 malformed teammate mailbox 訊息 crash loop」是 agent-teams 信箱層、「auto-updater 不再覆寫 `~/.local/bin/claude` 的自訂 launcher script 或 symlink」是更新管線（這台機器的 launcher 是官方原裝 symlink，patch 的對象是 symlink 解析到的版本化 binary 本體，對本 repo 沒有影響）、「良性系統生成對話更新觸發的誤報 prompt-injection 警告」是警告分類器修復——與 bug cluster 的 model 側那一半*語意上*相鄰，但不是 parser。strings diff（新增 3,267／移除 2,721）在關鍵軸線上跟 2.1.206 一樣乾淨：新增集裡 charCode／codePoint／tokenizer 味的行**連續第二版是零條**，6 條泛用 `parse` 命中全落在別處（plugin shell-form 警告文案、script 輸出解析提示、proxy response 解析、ANSI 色碼 `parseFloat`、Storybook adapter 註釋、排程 interval 解析提示）。新增集跟官方 changelog 自己的主題對得上——agent 味字串（37）、plugin（24）、auto-mode（22，Bedrock／Vertex／Foundry 免 opt-in 那條）、teammate-mailbox（20）、worktree（14）、launcher／symlink（10）——沒有一條伸進 parser。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `1397a062c688…` → patched `da14ef36a630…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 4303，執行檔解析到 `~/.local/share/claude/versions/2.1.207`，inode 58669478，patch 於 2026-07-11T02:26:36Z 完成後 23 秒啟動——patched dogfooding）。一條磁碟層註腳：這次 re-sign 讓檔案縮了 1,403,616 bytes，又是大 CD 版面——2.1.207 原廠 CodeDirectory 帶 58,435+7 個 hash slot（1,870,277 bytes）外加 9,046 bytes Developer ID 憑證鏈，被 ad-hoc re-sign 換成 14,609+2 slot（467,648 bytes）的精簡版；2.1.202、206、207 都是重簽章原廠版面，2.1.204／205 的精簡原廠簽章現在看來才是特例。這是 2.1.181 以來官方第 **19** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205、206 後）仍未修 VH1。
+
 ## 2026-07-10
 
 ### Changed
