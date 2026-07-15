@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-15
+
+### Changed
+
+- tested badge 更新到 **2.1.210**。Claude Code 從 2.1.208 → 2.1.210——跳過 2.1.209（本機從未裝過；`~/.local/share/claude/versions/` 現在有 207、208、210；官方 2.1.209 changelog 只有 1 條 dialog-fix 回滾，沒有東西需要跨越），且每日一更的節奏在 2.1.207→208 週末暫停後恢復（2.1.208 週一 2026-07-14、2.1.210 週二 2026-07-15）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.208 逐字相同——±260 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續七版（2.1.202、2.1.204、2.1.205、2.1.206、2.1.207、2.1.208、2.1.210）都帶同一組區域名稱。build 溯源：原廠 binary 長了 1,264,032 bytes（240,245,936 → 241,509,968），parser site 漂移 +1,142,615 bytes（212,188,046 → 213,330,661）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.210 changelog（33 條——機械 `grep -c`，不是 summarization model 幻覺出的 42）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser——*聽起來*最近的條目全落在別層：「修復 paste markers 洩漏到外部編輯器……出現 È/É 怪字元」是剪貼簿編碼，不是 streaming token 解析；「加固 Agent 工具對 subagent 讀取內容的間接 prompt injection 防護」是 model 側安全措施，不是 parser 修復；「Fable 在 advisor 選擇器暫時顯示不可用」是模型可用性，不是 parsing。strings diff（新增 4,193／移除 3,896）在 VH1 核心軸線回到零：新增集裡 charCode／codePoint／tokenizer 味的行零條（2.1.208 的 5 條小波峰沒有延續），3 條泛用 `parse` 命中全落在別處——一條 skill prompt 指令（「the script will parse your output」）、一條 `/loop` 間隔解析 prompt 範本、一條 utility 函數；7 條 `stream` 命中全是 CLI stream-json I/O 和 proxy/gateway 程式碼。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `1b471d62d111…` → patched `2891b44543c7…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 27421，執行檔解析到 `~/.local/share/claude/versions/2.1.210`，inode 59218077，patch 於 2026-07-15T00:53:33Z 完成——patched dogfooding）。一條磁碟層註腳：re-sign 只讓檔案縮了 1,184 bytes，吻合 2.1.204／205／208 的精簡 CD 版面——交替的原廠簽章版面 pattern 持續中。這是 2.1.181 以來官方第 **21** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205、206、207、208 後）仍未修 VH1。
+
 ## 2026-07-14
 
 ### Changed
