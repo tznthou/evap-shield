@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-16
+
+### Changed
+
+- tested badge 更新到 **2.1.211**。Claude Code 從 2.1.210 → 2.1.211——版號連續，兩點 diff 不需要跨過任何沒裝的版本（`~/.local/share/claude/versions/` 現在有 208、210、211；2.1.203 和 2.1.209 仍是本機唯二從未裝過的版本）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.210 逐字相同——±260 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續八版（2.1.202、2.1.204、2.1.205、2.1.206、2.1.207、2.1.208、2.1.210、2.1.211）都帶同一組區域名稱。build 溯源：原廠 binary 長了 935,712 bytes（241,509,968 → 242,445,680），parser site 漂移 +828,635 bytes（213,330,661 → 214,159,296）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.211 changelog（37 條，機械 `grep -c` 直接抓官方檔案）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser——*聽起來*最近的條目全落在別層：「修復 permission preview 轉發到 chat channel 時未中和雙向覆寫／零寬／近似引號字元，使 tool input 無法在視覺上竄改核准訊息」是核准提示的顯示層防偽消毒，不是解析 tool 參數的 streaming tokenizer；「改善 background agent 結果回報——Claude 現在會等真正完成而非捏造結果」是 model 側 confabulation 防護欄（跟 2.1.205 那兩條 guardrail 同屬根因 B 領域），不是 client parser 修復；「新增 `--forward-subagent-text` ……把 subagent 文字與 thinking 納入 stream-json 輸出」和 headless stdin 崩潰修復都是 CLI stream-json I/O，跟 2.1.208／210 同一層；「整數環境變數……接受科學記號如 `1e6` 和 `64_000`」是環境變數整數解析，不是 JSON string tokenizer。strings diff（新增 3,593／移除 2,958）在 VH1 核心軸線維持零：新增集裡 charCode／codePoint／tokenizer 味的行零條（延續 2.1.210 的零），10 條泛用 `parse` 命中全落在別處——跟 2.1.210 同一條 skill prompt 指令（「the script will parse your output」）和 `/loop` 間隔解析範本，外加 proxy-response 解析、ANSI `parseFloat`、一個 Storybook adapter、`parseInt` 環境變數處理、一個 `parseToolPreset` helper；`stream` 命中全是 CLI stream-json I/O、streaming 文件範本和 proxy/gateway 程式碼。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte——±260 window 裡恰好只有 flag 這 1 個 byte 不同；原廠 `5a728a76198b…` → patched `0a96549030b8…`），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 36759，執行檔解析到 `~/.local/share/claude/versions/2.1.211`，inode 59351799，patch 於 2026-07-16T01:25:28Z 完成、本 session 21 秒後啟動——patched dogfooding）。一條磁碟層註腳：re-sign 只讓檔案縮了 1,184 bytes，吻合 2.1.204／205／208／210 的精簡 CD 版面——交替的原廠簽章版面 pattern 持續中。這是 2.1.181 以來官方第 **22** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205、206、207、208、210 後）仍未修 VH1。
+
 ## 2026-07-15
 
 ### Changed
