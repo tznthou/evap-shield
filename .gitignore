@@ -27,3 +27,4 @@ research/
 *.orig
 *.tmp
 *.tmp.*
+.claude/RESUME.md
