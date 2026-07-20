@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-20
+
+### Changed
+
+- tested badge 更新到 **2.1.215**。Claude Code 從 2.1.214 → 2.1.215，版號連續，兩點 diff 不需要跨過任何沒裝的版本（`~/.local/share/claude/versions/` 現在有 212、214、215；2.1.203、2.1.209、2.1.213 仍是本機從未裝過的三個版本）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.214 逐字相同——±400 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續**十一版**（2.1.202、2.1.204、2.1.205、2.1.206、2.1.207、2.1.208、2.1.210、2.1.211、2.1.212、2.1.214、2.1.215）都帶同一組區域名稱。build 溯源：原廠 binary 只長了 32,832 bytes（247,091,504 → 247,124,336）——判決帳裡最小的一次尺寸變化——parser site 漂移 +24,992 bytes（217,521,589 → 217,546,581）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.215 changelog **只有一條**——繼 2.1.209 之後判決帳裡第二個單條目版本；npm 顯示 2026-07-19T00:53Z 發布，離 2.1.214 才一天——「Claude 不再自行執行 `/verify` 和 `/code-review` skills；需要時自己用 `/verify` 或 `/code-review` 呼叫」：skill 調度政策、model 面，離 tool-call parsing、JSON tokenization、streaming parser 都遠得很。strings diff（新增 12,683／移除 5,948——33 KB 的尺寸變化配一條 changelog 卻有這麼大的字串翻動，正是 re-segmentation 在作怪：位移過的 byte 段被 `strings` 重切成「新」行）新增集裡有 130 條 charCode／codePoint／tokenizer 味的行，但抽樣全是熟面孔收成：同一段 ajv schema-codegen 模板（`w_` 命名從 2.1.214 的 diff 延續過來）、PEM 解析器、PowerShell launcher 字串、highlight.js 文法定義；泛用 parse／stream 命中則落在 acorn 式模組解析、Azure SDK 管線、資料庫 retention 清理——沒有一條是 VH1 site；判決錨在結構錨點對 parser site window 的逐 byte 比對，不靠 strings diff。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `90608b5c5ab5…` → patched `c09a92f80424…`，2026-07-20T00:15:27Z 完成），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 4848，執行檔解析到 `~/.local/share/claude/versions/2.1.215`，inode 60022893，SessionStart 檢查在 patch 完成後 23 秒觸發；全機另一個活著的 claude process，PID 6758，持有同一個 patched inode）——patched dogfooding。（磁碟層註腳：re-sign 縮的還是那 1,184 bytes——原廠 CodeDirectory 15,053+7 個 hash slot、482,053 bytes，外加 9,047 bytes Developer ID 憑證鏈，換成 ad-hoc 的 15,053+2——精簡原廠版面就此**六連**：2.1.208、210、211、212、214、215。）這是 2.1.181 以來官方第 **25** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205、206、207、208、210、211、212、214 後）仍未修 VH1。
+
 ## 2026-07-18
 
 ### Changed
