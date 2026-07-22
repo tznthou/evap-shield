@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-07-22
+
+### Changed
+
+- tested badge 更新到 **2.1.217**。Claude Code 從 2.1.216 → 2.1.217，版號連續，兩點 diff 不需要跨過任何沒裝的版本（`~/.local/share/claude/versions/` 現在有 215、216、217；2.1.203、2.1.209、2.1.213 仍是本機從未裝過的三個版本）。結構錨點掃原廠 binary 仍只找到 1 個 vulnerable site（bug 1／fix 0），字元級掃描迴圈簽名 `e[++t]` 仍出現 7 次。parser site 跟 2.1.216 逐字相同——±400 bytes window raw 就對上，連 normalize 都不必——仍是 `,!l)r.push({type:"string",value:a})`，flag（`l`）、接收端（`r`）、累加變數（`a`）都沒變——這下連續**十三版**（2.1.202、2.1.204、2.1.205、2.1.206、2.1.207、2.1.208、2.1.210、2.1.211、2.1.212、2.1.214、2.1.215、2.1.216、2.1.217）都帶同一組區域名稱。build 溯源：原廠 binary 長了 1,231,200 bytes（249,225,584 → 250,456,784），parser site 漂移 +1,034,465 bytes（219,364,361 → 220,398,826）；Bun banner 仍是 `Bun v1.4.0`，沒有 runtime 升級。Anthropic 自己的 2.1.217 changelog（20 條，直接抓下來 `grep -c` 機械計數；npm 顯示 2026-07-21T19:55Z 發布）沒有一條碰 tool-call parsing、JSON tokenization 或 streaming parser。聽起來最沾邊的兩條都在別的層：「Fixed a memory leak where truncated MCP tool outputs kept the full untruncated result in memory」是輸出緩衝的記憶體簿記、不是 parsing；「Fixed `--resume`/`--continue` and `/resume` failing with a TypeError when a transcript has a malformed attachment entry」是 transcript 檔案載入的強健性、不是 wire parser；這版的大宗是 subagent 治理（並行上限、預設不再巢狀 spawn、`--max-budget-usd` 會攔停 background agents）加上 Windows／background session 修復與 UI 打磨（emoji shortcode 自動完成、螢幕閱讀器修復）。strings diff（新增 5,386／移除 2,902）新增集裡有 2 條 charCode／codePoint／tokenizer 味的行——都來自同一個新 template 的 backslash 禁用（註釋裡的 `fromCharCode(92)` 加一句 `json.indexOf(String.fromCharCode(92))` 檢查式），是內容淨化、不是 streaming parser（2.1.216 起的零條連線斷了，但這兩條身分已查明）；28 條泛用 parse 命中落在 DOMParser HTML 往返和 VM-realm 的 `JSON.parse` error-detail 橋接——沒有一條是 VH1 site；主題計數（agent 56、transcript 24、subagent 22、budget 11、worktree 8）對上 changelog 那 20 條。version-agnostic patcher 零腳本改動重套（`!l`→`!0`，1 byte；原廠 `5840c777fd47…` → patched `cda2b45d5589…`，2026-07-22T04:28:53Z 完成），並在磁碟（bug 0／fix 1）、有效 ad-hoc 簽章、本 session 的 mmap inode 三處驗證（`lsof` 查本 session 自己的 process，PID 51005，執行檔解析到 `~/.local/share/claude/versions/2.1.217`，inode 60393820，patch 完成後 23 秒啟動——檢查當下全機唯一活著的 claude process）——patched dogfooding。（磁碟層註腳：re-sign 縮的還是那 1,184 bytes——原廠 CodeDirectory 15,256+7 個 hash slot、488,549 bytes，外加 9,046 bytes Developer ID 憑證鏈，換成 ad-hoc 的 15,256+2——精簡原廠版面就此**八連**：2.1.208、210、211、212、214、215、216、217。）這是 2.1.181 以來官方第 **27** 個有效改版（繼 2.1.183、185、186、187、190、191、193、195、196、197、198、199、200、201、202、204、205、206、207、208、210、211、212、214、215、216 後）仍未修 VH1。
+
 ## 2026-07-21
 
 ### Changed
