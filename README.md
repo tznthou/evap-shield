@@ -3,7 +3,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-4.0+-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.x-7C3AED.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Tested](https://img.shields.io/badge/tested-2.1.223-brightgreen.svg)](CHANGELOG.md)
+[![Tested](https://img.shields.io/badge/tested-2.1.232-brightgreen.svg)](CHANGELOG.md)
 
 [中文](README_ZH.md)
 
@@ -146,6 +146,10 @@ bash patch-vh1.sh        # re-detect, back up, and patch the new version
 - **patched / unchanged** — stays quiet.
 
 It only detects and reports — it never patches the binary and never edits any file. The judgement, and the binary modification itself, stay in your hands.
+
+### Maintenance cadence (as of 2026-08-14)
+
+Through 2.1.223, every Claude Code release got a full per-build verdict (anchored binary diff, strings rulers, changelog two-cut) before the tested badge moved. Upstream now releases daily, and 32 consecutive verdicts returned the same answer — so the per-build ritual moved to the mechanical layer, and full narrative verdicts are written on **events**: the detector reporting the anchor missing or changed, an upstream changelog entry near stream parsing, or external evidence moving. Between events, the tested badge means **mechanically verified**: anchor found, patch applied, smoke-tested, and dogfooded in daily use on this machine — without a per-build narrative entry. See CHANGELOG 2026-08-14 for the policy change and the back-filled 2.1.224–232 ledger.
 
 ---
 

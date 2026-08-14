@@ -6,6 +6,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-08-14
+
+### Changed
+
+- **維護節奏變更＋七版回溯補帳（2.1.224–2.1.232）。** 上游已進入日更節奏（八天九個版本號，其中一天連發兩版——2026-08-13 的 2.1.231 於 08:27Z、2.1.232 於 21:30Z），而在連續 32 次完整判決都回同一個答案之後，逐版儀式移交機械層：`SessionStart` 偵測 hook 與 version-agnostic patcher 仍然每版都跑（patcher 在錨點缺失或不唯一時會拒絕執行——這本身就是一次 byte 層判決），完整敘事判決改為**事件觸發**——錨點消失或改變、上游 changelog 出現貼近 stream parsing 的條目、或外部證據有動靜——不再逐版寫。本條從留存的 per-hash 原廠 backup 回溯補帳：窗口內裝過的七版（2.1.224、226、227、228、229、231、232）逐版掃描均為 **vuln 1／fix 0**，區域名稱不變（仍是 `,!l)r.push({type:"string",value:a})`），同名鏈延伸到**連續二十五版**（2.1.202 → 2.1.232），parser 核心域（match 前 400 到後 170 bytes）逐步 byte-identical 串鏈。2.1.225 發布後 21.5 小時即被 2.1.226 取代、本機從未裝過（213/214 那型）；**2.1.230 則根本沒在 npm 發布過**——registry 層跳號，新變體。回溯補帳挖出一個真發現：窗口尾段（match 後 +170 到 +435 bytes）只在 227 → 228 這一步漂移 249 bytes，其餘各步全部相同；判源結果——**2.1.228 改了同一顆 JSON tokenizer 的 number 分支**（加上科學記號支援：數字累加條件現在也吃 `e`／`E` 與其後的指數正負號），而 Anthropic 的 2.1.228 changelog（19 條）沒有任何對應條目——這是本帳開帳以來**第一次觀測到官方動 VH1 所在的 tokenizer**，動的是隔壁分支，string 分支——flag、接收端、累加變數、連同吃掉 token 的 `,!l)` 守門——byte 層原封不動。「未修」的意思從「沒人碰的檔案」變成「碰過的函式、沒修的 bug」。窗口 changelog 兩刀（224–232 全部條目）：沒有任何一條碰 streaming JSON tokenizer（malformed 味的條目判源到 gateway 設定驗證、MCP protocol-version probe 逾時、AWS/Vertex region fallback；stream 味的判源到 transport idle-timeout 恢復與 terminal 顯示層重印）。**2.1.232 是 2.1.181 以來官方第 39 個有效改版，無一是修復。** tested badge 更新到 **2.1.232**，事件觸發條目之間它的語義已寫進 README：機械層逐日驗證——錨點找到、patch 套上、smoke test 通過、每日 dogfooding——但無逐版敘事判決。完整條目在 investigation §7；§8 新增鄰角調查：#84362／#84405（串內另有 2.1.226 上的獨立部署確認）量化了**同一顆 tokenizer 的 absorb-forward 失效**——close tag 錯拼或殘缺時，parser 把後續參數塊當字面文字吸進前一個字串欄位：參數多的 MCP call 約 19.6% 有聲拒絕、約 6.2% 綠燈落地但參數被靜默吸收，單字串欄位工具在同部署約 8k frames 零失敗——同一個函式裡的另一條路徑，我們的 EOF 分支 patch 對它既幫不上也不礙事；他們的 PreToolUse residue-detection hook 是那一角的 hook 層對應物，零重疊、完全互補。VH1 本體形態：2026-08-05 之後零新外部報告。
+
 ## 2026-08-06
 
 ### Changed

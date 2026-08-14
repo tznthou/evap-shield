@@ -3,7 +3,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-4.0+-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.x-7C3AED.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Tested](https://img.shields.io/badge/tested-2.1.223-brightgreen.svg)](CHANGELOG_ZH.md)
+[![Tested](https://img.shields.io/badge/tested-2.1.232-brightgreen.svg)](CHANGELOG_ZH.md)
 
 [English](README.md)
 
@@ -146,6 +146,10 @@ bash patch-vh1.sh        # 重新偵測、備份、patch 新版本
 - **patched / 無變化**——保持安靜。
 
 它只偵測與回報——絕不自己 patch binary、也不改任何檔案。判斷（以及修改 binary 本身）留在你手上。
+
+### 維護節奏（2026-08-14 起）
+
+到 2.1.223 為止，Claude Code 每個版本都先做完整逐版判決（錨定 binary diff、strings 量尺、changelog 兩刀）才動 tested badge。上游現已日更，而連續 32 次判決都回同一個答案——所以逐版儀式移交機械層，完整敘事判決改為**事件觸發**：偵測 hook 回報錨點消失或改變、上游 changelog 出現貼近 stream parsing 的條目、或外部證據有動靜。事件之間，tested badge 的意思是**機械層已驗證**：錨點找到、patch 套上、smoke test 通過、本機每日 dogfooding——但沒有逐版敘事條目。政策變更與 2.1.224–232 回溯補帳見 CHANGELOG 2026-08-14 條目。
 
 ---
 
