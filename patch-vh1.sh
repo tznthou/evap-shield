@@ -29,6 +29,35 @@ for arg in "$@"; do
   esac
 done
 
+# --- RETRACTED 2026-08-18 ---------------------------------------------------
+# This patch does nothing. VH1 lives in the Anthropic SDK's MessageStream helper;
+# the Claude Code CLI never reaches it. Official and patched 2.1.233 deliver
+# byte-identical tool input. The bug it targeted was fixed upstream between
+# 2.1.173 and 2.1.181, before this project began. See README.md.
+#
+# --status and --restore still work, so anyone who already patched can check and
+# undo it. Applying a new patch is disabled.
+if [[ "$RESTORE" == false && "$STATUS" == false ]]; then
+  cat >&2 <<'RETRACTED'
+
+  ⚠️  evap-shield is retracted (2026-08-18). This patch has no effect.
+
+      VH1 is in the Anthropic SDK's MessageStream helper. The CLI accumulates
+      partial_json into a string and takes a branch that never reaches it —
+      official and patched binaries produce byte-identical tool input. The bug
+      it targeted was fixed upstream in 2.1.173 -> 2.1.181, before this project
+      started. Patching is disabled; you would be modifying and re-signing a
+      binary for nothing.
+
+      Still available:  --status   show what was patched on this machine
+                        --restore  put the original binary back
+
+      Full account: README.md
+
+RETRACTED
+  exit 1
+fi
+
 STATE_DIR="${EVAP_SHIELD_STATE_DIR:-$HOME/.claude/state}"
 STATE_FILE="$STATE_DIR/patch-vh1.json"
 BACKUP_DIR="$STATE_DIR/patch-backups"
@@ -272,7 +301,10 @@ PY
   fi
   if [[ "$PATCH_STATUS" == "vulnerable" ]]; then
     echo ""
-    echo "Run: bash $0"
+    echo "NOTE: \"vulnerable\" here only means the VH1 bytes are unpatched. That"
+    echo "      reading is retracted (2026-08-18) — the CLI never executes those"
+    echo "      bytes, so the status carries no information about your install."
+    echo "      Nothing to do. See README.md."
   fi
   exit 0
 fi

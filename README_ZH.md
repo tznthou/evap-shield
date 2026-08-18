@@ -3,9 +3,52 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-4.0+-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.x-7C3AED.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Tested](https://img.shields.io/badge/tested-2.1.232-brightgreen.svg)](CHANGELOG_ZH.md)
+[![Retracted](https://img.shields.io/badge/status-retracted-red.svg)](#%EF%B8%8F-已撤回並封存--請勿安裝)
+[![Archived](https://img.shields.io/badge/archived-2026--08--18-lightgrey.svg)](#%EF%B8%8F-已撤回並封存--請勿安裝)
 
 [English](README.md)
+
+---
+
+# ⚠️ 已撤回並封存 — 請勿安裝
+
+**2026-08-18。** 這個專案的核心主張是錯的。三項結論，都可以用本 repo 的 [harness](harness/) 重跑驗證：
+
+**一、bug 在這個專案開始之前就被修好了。** tool input 塌成 `{}` 這個問題，官方在 2.1.173 到
+2.1.181 之間（2026 年 6 月 12–18 日）已經修掉。壞掉的輸入現在會以
+`__unparsedToolInput: {raw, len}` 的形式送達並觸發重試，不再靜默變成 `{}`。我們 2026-06-18
+在 2.1.181 開始 patch — **這個 patch 從頭到尾沒有在壞掉的 Claude Code 上跑過一次。**
+
+**二、patch 沒有任何作用。** `VH1` 位在 Anthropic SDK 的 `MessageStream` helper 裡。CLI 自己把
+`partial_json` 累積成**字串**，走的是另一條永遠不會經過它的分支。官方原版 2.1.233 與我們 patch
+過的 2.1.233，餵同一份 stream，送給模型的 tool input **逐字相同**。
+
+**三、39 個版本的判決紀錄每一筆都正確，而且毫無意義。** 每一筆都如實回報了 `VH1` 的 bytes 未被
+更動。它們全部錨在 CLI 根本不執行的程式碼上。
+
+我們也把「`tool_use` block 不見了」這件事在 client 端可偵測與不可偵測的分界測了出來 — 五個變體，
+在 2.1.173 與 2.1.233 上結果逐字相同，所以這條路徑從沒壞過，也沒被修過。**協定層不一致**的 stream
+全部會被攔下並回報給模型，包括
+[#63583](https://github.com/anthropics/claude-code/issues/63583) 描述的那個症狀。真正**偵測不到**的
+是協定層合法的情況：模型在文字裡宣告要用工具，但 `stop_reason` 是 `end_turn` 且沒有 block；或是
+宣告了三個 tool call 只送出一個。這些情況以 `num_turns=1`、`is_error=false`、零重試、session 正常
+結束收場 — 從 client 的角度看沒有任何地方不對勁，所以也沒有任何地方能讓 client 端的修補掛上去。
+細節見 [harness/README.md](harness/README.md)。
+
+**以下原文刻意不刪、不改。** 推理是謹慎的，測試是通過的（760 個案例、0 regression），證據是公開的
+— 結論還是錯的。而且反證兩度已經在手上，兩次都被歸類成次要細節：
+
+- [第 6 節](docs/vh1-investigation.md)描述的三個 server-side mock 實驗，跟這次撤回所做的完全是同
+  三個。其中一個當場觀測到真實的 `{}`，卻被判定成「*secondary `?? {}` fallback，不是 primary
+  parser drop*」，並下了結論：「*那是這套 harness 的結構性邊界，不是缺工具。*」它不是結構性邊界。
+  同一套方法，一個下午就走到了答案。
+- 第 8 節在撤回的五週前，自己收在這句：「*patching, ours included, has no purchase here*」 — 而沒
+  有人問下一句，也就是：那這個 patch 到底在保護什麼。
+
+把這些刪掉，等於刪掉這裡唯一值得留下的東西。一份「謹慎地、可驗證地、公開地錯了」的紀錄，比一個從
+來沒有生效過的工具有用。
+
+---
 
 Claude Code VH1 streaming parser bug 的防禦工具包。這個 bug 會讓 tool call 的參數靜默變成 `{}`。
 

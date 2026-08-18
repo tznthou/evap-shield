@@ -15,6 +15,28 @@ set -euo pipefail
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 
+# --- RETRACTED 2026-08-18 ---------------------------------------------------
+# The hook this installs guards a bug that was fixed upstream before this
+# project began. Its only observed trigger in real use was a false positive on
+# a legitimate zero-argument MCP tool. Installation is disabled. See README.md.
+cat >&2 <<'RETRACTED'
+
+  ⚠️  evap-shield is retracted (2026-08-18). Installation is disabled.
+
+      The PreToolUse hook guards a failure mode Claude Code already handles:
+      built-in tools reject empty input before the hook is reached, and the
+      underlying parser bug was fixed upstream in 2.1.173 -> 2.1.181. Its only
+      observed trigger in two months of real use was a false positive that
+      blocked a legitimate zero-argument MCP tool.
+
+      To remove an existing install: delete the evap-shield / check-update
+      entries from ~/.claude/settings.json and the two scripts in ~/.claude/hooks/.
+
+      Full account: README.md
+
+RETRACTED
+exit 1
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_SRC="$SCRIPT_DIR/evap-shield.sh"
 CHECK_SRC="$SCRIPT_DIR/check-update.sh"

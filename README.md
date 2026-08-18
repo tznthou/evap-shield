@@ -3,9 +3,59 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-4.0+-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.x-7C3AED.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Tested](https://img.shields.io/badge/tested-2.1.232-brightgreen.svg)](CHANGELOG.md)
+[![Retracted](https://img.shields.io/badge/status-retracted-red.svg)](#-retracted-and-archived--do-not-install-this)
+[![Archived](https://img.shields.io/badge/archived-2026--08--18-lightgrey.svg)](#-retracted-and-archived--do-not-install-this)
 
 [中文](README_ZH.md)
+
+---
+
+# ⚠️ Retracted and archived — do not install this
+
+**2026-08-18.** This project's central claim was wrong. Three findings, each reproducible
+with the [harness](harness/) in this repository:
+
+**1. The bug was already fixed before this project started.** Tool input collapsing to `{}`
+was fixed upstream somewhere between 2.1.173 and 2.1.181 (June 12–18, 2026). Malformed input
+now arrives as `__unparsedToolInput: {raw, len}` and triggers a retry instead of silently
+becoming `{}`. We began patching on 2026-06-18 at 2.1.181 — **this patch never once ran on a
+broken version of Claude Code.**
+
+**2. The patch does nothing.** `VH1` lives in the Anthropic SDK's `MessageStream` helper. The
+CLI accumulates `partial_json` into a *string* and takes a branch that never reaches it.
+Official 2.1.233 and our patched 2.1.233, fed the same stream, deliver byte-identical tool
+input to the model.
+
+**3. The 39-version ledger is accurate and meaningless.** Every verdict correctly reports the
+`VH1` bytes unchanged. All of them are anchored to code the CLI does not execute.
+
+We also mapped what a client can and cannot detect when a `tool_use` block goes missing —
+five variants, byte-identical results on 2.1.173 and 2.1.233, so this path was never broken
+and never fixed. Every protocol-inconsistent stream is caught and reported back to the model,
+including the symptom [#63583](https://github.com/anthropics/claude-code/issues/63583)
+describes. What is *not* detectable is the protocol-valid case: the model announcing a tool
+call in prose with `stop_reason: end_turn` and no block, or emitting fewer blocks than it
+announced. Those end with `num_turns=1`, `is_error=false`, no retry, session over — from the
+client's side nothing is wrong, so there is nothing for a client-side fix to hook into.
+Details in [harness/README.md](harness/README.md).
+
+**The text below is left unedited, deliberately.** The reasoning was careful, the tests passed
+(760 cases, 0 regressions), the evidence was public — and the conclusion was still wrong.
+Twice the disconfirming evidence was already in hand and got filed as a secondary detail:
+
+- [Section 6](docs/vh1-investigation.md) describes the same three server-side mock experiments
+  run for this retraction. One of them observed a real `{}` and classified it as *"the
+  secondary `?? {}` fallback, not the primary parser drop"*, concluding: *"That is a structural
+  boundary of the harness, not a missing tool."* It was not a structural boundary. The same
+  method reached the answer in an afternoon.
+- Section 8, five weeks before the retraction, closed with *"patching, ours included, has no
+  purchase here"* — and nobody asked the next question, which was what the patch was
+  protecting.
+
+Deleting all this would remove the only part worth keeping. An account of being carefully,
+verifiably, publicly wrong is more useful than a tool that never worked.
+
+---
 
 Defense toolkit for the Claude Code VH1 streaming parser bug that silently turns tool arguments into `{}`.
 

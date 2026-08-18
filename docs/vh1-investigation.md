@@ -4,6 +4,30 @@
 
 *Time anchor: the core binary-level findings are as of Claude Code 2.1.179 (2026-06-17), re-checked on every build through 2.1.223 (§7). The methods below let you re-check any later build yourself.*
 
+> ## ⚠️ Correction, 2026-08-18 — the central conclusion below is wrong
+>
+> **Nothing below has been edited.** This banner is the only change. Read the rest as a record
+> of how the wrong answer was reached, not as a description of Claude Code.
+>
+> Three corrections, each reproducible with the [harness](../harness/):
+>
+> 1. **"unfixed upstream" is false.** The `{}` collapse was fixed between 2.1.173 and 2.1.181
+>    (2026-06-12 to 06-18). Malformed input now arrives as `__unparsedToolInput: {raw, len}` and
+>    triggers a retry. Every version claim in the TL;DR and §7 postdates the fix.
+> 2. **The patch does nothing.** `VH1` is in the Anthropic SDK's `MessageStream` helper; the CLI
+>    accumulates `partial_json` into a *string* and takes a branch that never reaches it. Official
+>    and patched 2.1.233 deliver byte-identical tool input.
+> 3. **§6's "structural boundary" was not structural.** The claim that the primary failure path is
+>    unreachable from a server-side mock — "*a structural boundary of the harness, not a missing
+>    tool*" — is false. The same three experiments, rerun on 2026-08-17, reached a definitive
+>    answer in an afternoon. The third experiment described in §6 *already observed a real `{}`*
+>    and classified it as secondary. The disconfirming evidence was in hand from the start.
+>
+> §8's closing line — "*patching, ours included, has no purchase here*" — was correct, and was
+> written five weeks before anyone asked what the patch was protecting.
+>
+> Full account: [../README.md](../README.md#-retracted-and-archived--do-not-install-this)
+
 ## TL;DR
 
 - **The bug is real and unfixed upstream.** Tool calls intermittently arrive with their arguments collapsed to `{}`. Three open issues track it (#62123, #67765, #63583); none had a maintainer reply as of 2026-06-24.

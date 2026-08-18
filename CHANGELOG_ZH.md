@@ -6,6 +6,36 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。本專案以日期分組，而非語意化版本——這是腳本工具集，不走 package registry 發布。
 
+## 2026-08-18
+
+### Retracted
+
+- **本專案的核心主張是錯的；repo 已封存。** 三項結論，都可用新增的 `harness/` 重跑驗證：(1) `{}`
+  塌陷問題官方已在 2.1.173 到 2.1.181 之間（2026-06-12 至 06-18）修好 — 壞掉的輸入現在會以
+  `__unparsedToolInput: {raw, len}` 送達並觸發重試 — 而我們 2026-06-18 在 2.1.181 才開始 patch，
+  **從頭到尾沒有在壞掉的版本上跑過一次**；(2) patch 沒有作用，因為 `VH1` 位在 Anthropic SDK 的
+  `MessageStream` helper 裡，而 CLI 自己把 `partial_json` 累積成**字串**、走另一條永遠不會經過它
+  的分支 — 官方原版與 patch 過的 2.1.233 餵同一份 stream，送給模型的 tool input 逐字相同；(3) 39
+  個版本的判決紀錄每一筆都正確、而且毫無意義，全部如實回報了 CLI 根本不執行的那段程式碼未被更動。
+  另外針對「`tool_use` block 不見了」做的五變體實測，在 2.1.173 與 2.1.233 上結果逐字相同 — 這條
+  路徑從沒壞過也沒被修過 — 且分界乾淨：協定層不一致的 stream 全部會被攔下並回報給模型（包含 #63583
+  描述的症狀），協定層合法的（文字宣告要用工具但 `stop_reason` 是 `end_turn` 且無 block；宣告的
+  block 數多於實際送出）則以 `num_turns=1`、`is_error=false`、零重試收場，client 端結構上偵測不到。
+
+### Changed
+
+- `install.sh` 與 `patch-vh1.sh` 改為拒絕執行並說明原因。`patch-vh1.sh --status` 與 `--restore`
+  仍然可用，讓已經安裝的人能檢查與還原；`--status` 不再建議去 patch，並明說它的 "vulnerable"
+  判讀不帶任何資訊。
+- `README.md`、`README_ZH.md` 與 `docs/vh1-investigation.md` 加上撤回聲明。**原有內容一字未改、
+  未刪** — 一份「謹慎地、可驗證地、公開地錯了」的紀錄，是這個專案唯一值得留下的部分。
+
+### Added
+
+- `harness/` — 推翻本專案自身結論的那套零成本重現 harness。一個假的 Anthropic API server，把間歇
+  性的失效模式變成確定性可重現，另附官方逐版本 binary 下載端點，讓跨修復窗口的 red/green 測試不必
+  依賴本機備份。
+
 ## 2026-08-14
 
 ### Changed

@@ -6,6 +6,42 @@ All notable changes to evap-shield are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project groups changes by date rather than semantic version — it's a script toolkit, not a registry-published package.
 
+## 2026-08-18
+
+### Retracted
+
+- **The project's central claim was wrong; the repository is archived.** Three findings, each
+  reproducible with the new `harness/`: (1) the `{}` collapse was fixed upstream between 2.1.173
+  and 2.1.181 (2026-06-12 to 06-18) — malformed input now arrives as `__unparsedToolInput: {raw,
+  len}` and triggers a retry — so patching, which began 2026-06-18 at 2.1.181, never once ran on a
+  broken build; (2) the patch has no effect, because `VH1` sits in the Anthropic SDK's
+  `MessageStream` helper while the CLI accumulates `partial_json` into a *string* and takes a
+  branch that never reaches it — official and patched 2.1.233, fed the same stream, deliver
+  byte-identical tool input to the model; (3) the 39-build ledger is accurate and meaningless,
+  every verdict correctly reporting unchanged bytes in code the CLI does not execute. A separate
+  five-variant probe of missing `tool_use` blocks returned byte-identical results on 2.1.173 and
+  2.1.233 — that path was never broken and never fixed — and split cleanly: protocol-inconsistent
+  streams are all caught and reported back to the model (including the symptom #63583 describes),
+  while protocol-valid ones (prose announcing a tool call with `stop_reason: end_turn` and no
+  block; fewer blocks emitted than announced) end with `num_turns=1`, `is_error=false`, no retry,
+  and are structurally undetectable from the client.
+
+### Changed
+
+- `install.sh` and `patch-vh1.sh` now refuse to run and explain why. `patch-vh1.sh --status` and
+  `--restore` still work so existing installs can be inspected and undone; `--status` no longer
+  suggests patching and states that its "vulnerable" reading carries no information.
+- `README.md`, `README_ZH.md` and `docs/vh1-investigation.md` carry a retraction notice. **No
+  prior text was edited or deleted** — an account of being carefully, verifiably, publicly wrong
+  is the only part of this project worth keeping.
+
+### Added
+
+- `harness/` — the zero-cost reproduction harness that refuted this project's own conclusions.
+  A fake Anthropic API server making intermittent failure modes deterministic, plus the official
+  per-version binary download endpoint that makes red/green testing across the fix window
+  possible without local backups.
+
 ## 2026-08-14
 
 ### Changed
